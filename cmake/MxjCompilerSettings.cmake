@@ -1,0 +1,10 @@
+# Shared compiler settings for MXJ targets.
+function(mxj_configure_target target)
+    target_compile_features(${target} PUBLIC cxx_std_20)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /MP)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wno-missing-field-initializers)
+    endif()
+    set_target_properties(${target} PROPERTIES FOLDER "MXJ")
+endfunction()

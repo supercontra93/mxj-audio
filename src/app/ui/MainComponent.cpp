@@ -10,7 +10,7 @@ namespace mxj
         constexpr int statusBarHeight = 24;
     }
 
-    MainComponent::MainComponent (AppContext& ctx) : context (ctx)
+    MainComponent::MainComponent (AppContext& ctx, Workspace& w) : context (ctx), workspace (w)
     {
         for (const auto* c : context.commands.getAll())
             commandOrder.add (c->id);
@@ -27,20 +27,29 @@ namespace mxj
             menuItemsChanged();
         };
 
+        workspace.addChangeListener (this);
+        context.audio.getDeviceManager().addChangeListener (this);
+        workspace.onStatusMessage = [this] (const juce::String& m) { setStatusMessage (m); };
+
         refreshTexts();
         setSize (1280, 800);
     }
 
     MainComponent::~MainComponent()
     {
+        workspace.onStatusMessage = nullptr;
+        workspace.removeChangeListener (this);
+        context.audio.getDeviceManager().removeChangeListener (this);
         context.commands.onCommandPerformed = nullptr;
         commandManager.setFirstCommandTarget (nullptr);
     }
 
     void MainComponent::refreshTexts()
     {
-        startPage = std::make_unique<StartPage> (context.commands, [this] (const CommandId& id) { runCommand (id); });
-        addAndMakeVisible (*startPage);
+        startPage = nullptr;
+        editorPage = nullptr;
+        shownDocument = nullptr;
+        showPage();
 
         statusBar.refreshTexts();
 
@@ -64,6 +73,79 @@ namespace mxj
 
         if (startPage != nullptr)
             startPage->setBounds (area);
+
+        if (editorPage != nullptr)
+            editorPage->setBounds (area);
+    }
+
+    void MainComponent::showPage()
+    {
+        const auto* doc = workspace.getDocument();
+        const bool pageExists = doc != nullptr ? editorPage != nullptr : startPage != nullptr;
+
+        if (pageExists && doc == shownDocument)
+            return;
+
+        shownDocument = doc;
+        auto run = [this] (const CommandId& id) { runCommand (id); };
+
+        if (doc != nullptr)
+        {
+            startPage = nullptr;
+            editorPage = std::make_unique<EditorPage> (workspace, context.commands, run);
+            addAndMakeVisible (*editorPage);
+        }
+        else
+        {
+            editorPage = nullptr;
+            startPage = std::make_unique<StartPage> (context.commands, run,
+                                                     [this] { return context.audio.describeDevice(); });
+            addAndMakeVisible (*startPage);
+        }
+
+        resized();
+
+        if (onDocumentChanged != nullptr)
+            onDocumentChanged();
+    }
+
+    void MainComponent::changeListenerCallback (juce::ChangeBroadcaster*)
+    {
+        showPage();
+        commandManager.commandStatusChanged();
+
+        if (startPage != nullptr)
+            startPage->repaint(); // shows the audio device
+    }
+
+    void MainComponent::setStatusMessage (const juce::String& message)
+    {
+        statusBar.setMessage (message);
+    }
+
+    bool MainComponent::isInterestedInFileDrag (const juce::StringArray& files)
+    {
+        return files.size() == 1 && audioFormats::canOpen (juce::File (files[0]));
+    }
+
+    void MainComponent::filesDropped (const juce::StringArray& files, int, int)
+    {
+        dragOver = false;
+        repaint();
+
+        if (! files.isEmpty())
+            workspace.openFile (juce::File (files[0]));
+    }
+
+    void MainComponent::paintOverChildren (juce::Graphics& g)
+    {
+        if (! dragOver)
+            return;
+
+        g.setColour (palette::accent.withAlpha (0.12f));
+        g.fillRect (getLocalBounds().withTrimmedTop (menuBarHeight));
+        g.setColour (palette::accent);
+        g.drawRect (getLocalBounds().withTrimmedTop (menuBarHeight), 2);
     }
 
     juce::StringArray MainComponent::getMenuBarNames()

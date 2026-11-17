@@ -10,4 +10,6 @@ namespace mxj::keys
     inline constexpr const char* windowState         = "ui.windowState";     // JUCE window state string
     inline constexpr const char* updateCheckOnStart  = "updates.checkOnStartup";
     inline constexpr const char* updateChannel       = "updates.channel";    // "stable" or "beta"
+    inline constexpr const char* audioDeviceState    = "audio.deviceState";  // JUCE AudioDeviceManager XML, one line
+    inline constexpr const char* lastOpenFolder      = "files.lastOpenFolder";
 }

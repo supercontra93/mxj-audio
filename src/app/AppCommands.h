@@ -2,6 +2,7 @@
 #pragma once
 
 #include "app/AppContext.h"
+#include "app/Workspace.h"
 
 namespace mxj
 {
@@ -14,8 +15,9 @@ namespace mxj
         std::function<void()> quit;
         std::function<void()> showAbout;
         std::function<void (const juce::String& languageCode)> setLanguage;
+        std::function<void()> showAudioSettings;
     };
 
-    /** Registers the commands that exist in phase 0. */
-    void registerAppCommands (AppContext& context, AppActions actions);
+    /** Registers the commands of the program. */
+    void registerAppCommands (AppContext& context, Workspace& workspace, AppActions actions);
 }

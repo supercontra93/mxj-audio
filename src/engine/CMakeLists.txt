@@ -1,3 +1,9 @@
-# mxj_engine: real-time engine (playback, recording, tracks, mixer, devices). Filled in phase 1.
-add_library(mxj_engine INTERFACE)
-target_link_libraries(mxj_engine INTERFACE mxj_formats)
+# mxj_engine: real-time engine (playback, recording, tracks, mixer, devices).
+add_library(mxj_engine STATIC
+    devices/AudioEngine.cpp
+    devices/AudioEngine.h
+    playback/PlaybackEngine.cpp
+    playback/PlaybackEngine.h)
+
+target_link_libraries(mxj_engine PUBLIC mxj_formats)
+mxj_configure_target(mxj_engine)

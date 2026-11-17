@@ -7,16 +7,18 @@
 
 namespace mxj
 {
-    MainWindow::MainWindow (AppContext& ctx, std::function<void()> quitFunction)
+    MainWindow::MainWindow (AppContext& ctx, Workspace& w, std::function<void()> quitFunction)
         : DocumentWindow (version::name, palette::background, DocumentWindow::allButtons),
           context (ctx),
+          workspace (w),
           onQuit (std::move (quitFunction))
     {
         setUsingNativeTitleBar (true);
         setResizable (true, false);
         setResizeLimits (800, 500, 10000, 10000);
 
-        auto content = std::make_unique<MainComponent> (context);
+        auto content = std::make_unique<MainComponent> (context, workspace);
+        content->onDocumentChanged = [this] { updateTitle(); };
         mainComponent = content.get();
         setContentOwned (content.release(), false);
 
@@ -32,6 +34,12 @@ namespace mxj
     {
         if (mainComponent != nullptr)
             removeKeyListener (mainComponent->getCommandManager().getKeyMappings());
+    }
+
+    void MainWindow::updateTitle()
+    {
+        const auto* doc = workspace.getDocument();
+        setName (doc != nullptr ? doc->getFile().getFileName() + " - " + version::name : juce::String (version::name));
     }
 
     void MainWindow::closeButtonPressed()

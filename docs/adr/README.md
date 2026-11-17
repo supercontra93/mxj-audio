@@ -9,3 +9,4 @@ a changed decision gets a new record that supersedes the old one.
 | [0002](0002-fetchcontent.md) | Fetch dependencies with CMake FetchContent instead of CPM | Accepted |
 | [0003](0003-juce-builtins.md) | Use JUCE's own JSON, logger and translations in phase 0 | Accepted |
 | [0004](0004-command-system.md) | String command ids, bridged to JUCE's command manager | Accepted |
+| [0005](0005-audio-model-and-playback.md) | Audio blocks, WAV read in place, peak cache, playback through a disk thread and lock-free FIFO | Accepted |

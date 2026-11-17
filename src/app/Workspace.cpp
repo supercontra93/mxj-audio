@@ -1172,7 +1172,7 @@ namespace mxj
 
                 if (report->before.integratedLufs <= dsp::LoudnessMeter::silence + 1.0f)
                     dialogs::showWarning (name, TRANS ("The selection is too short or too quiet to measure its loudness (at least half a second of sound is needed)."));
-                else if (report->peakLimitReached)
+                else if (report->peakLimitReached && ! report->limited)
                     dialogs::showInfo (name, message + "\n\n" + TRANS ("The target was not reached: the peaks would pass the true peak limit. Switch on the limiter option to reach it."));
             });
             return;

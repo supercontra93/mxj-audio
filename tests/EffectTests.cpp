@@ -504,7 +504,26 @@ TEST_CASE ("Match Loudness reaches the target and respects the true peak limit",
     REQUIRE (result.audio.getNumFrames() == input.getNumFrames());
     CHECK (result.limited);
     CHECK_THAT (result.after.integratedLufs, WithinAbs (-16.0, 0.3));
-    CHECK (result.after.truePeakDb <= -1.0f + 0.2f);
+    CHECK (result.after.truePeakDb <= -1.0f);
+
+    // Bright audio whose peaks fall between samples (a quarter of the sample
+    // rate, sampled 45 degrees off its peaks: the true peak is 3 dB above the
+    // sample peak). The limiter alone works on samples and would let them pass.
+    juce::AudioBuffer<float> bright = noise (2, (int) rate * 20, 0.05f);
+    for (int i = 0; i < bright.getNumSamples(); ++i)
+    {
+        const auto burst = (i % 12000) < 16 ? 0.6f : 0.05f; // short bright clicks
+        const auto hf = burst * (float) std::sin (juce::MathConstants<double>::halfPi * i + juce::MathConstants<double>::pi / 4.0);
+        for (int c = 0; c < 2; ++c)
+            bright.setSample (c, i, ((i / 24000) % 3 == 2 ? 0.02f : 1.0f) * (bright.getSample (c, i) + hf));
+    }
+
+    const auto brightResult = dsp::matchLoudness (toSequence (bright), -10.0f, -1.0f, true, store);
+    INFO ("before " << brightResult.before.integratedLufs << " tp " << brightResult.before.truePeakDb << " after " << brightResult.after.integratedLufs << " tp " << brightResult.after.truePeakDb);
+    CHECK (brightResult.limited);
+    CHECK_THAT (brightResult.after.integratedLufs, WithinAbs (-10.0, 0.3));
+    CHECK (brightResult.after.truePeakDb <= -1.0f);
+    CHECK (! brightResult.peakLimitReached);
 
     // Without a limiter the gain stops at the peak limit.
     const auto unlimited = dsp::matchLoudness (input, -16.0f, -1.0f, false, store);

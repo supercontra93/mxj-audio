@@ -150,11 +150,13 @@ namespace mxj::dsp
             return result;
         }
 
-        // Gain plus a limiter a little under the limit (the limiter works on samples;
-        // the margin covers the peaks between samples).
+        // Gain plus a limiter under the limit. The limiter works on samples, so the
+        // peaks between samples can still pass its ceiling: each pass measures the
+        // true peak and lowers the ceiling by what passed, and gives back the
+        // loudness the limiter took away.
         result.limited = true;
 
-        auto runPass = [&] (float gain, double from, double to)
+        auto runPass = [&] (float gain, float ceiling, double from, double to)
         {
             ChainSettings chain;
             auto amp = EffectSettings::defaultsFor ("amplify");
@@ -162,41 +164,46 @@ namespace mxj::dsp
             chain.push_back (amp);
 
             auto lim = EffectSettings::defaultsFor ("limiter");
-            lim.values[0] = 0.0f;              // input gain
-            lim.values[1] = peakLimit - 0.5f;  // ceiling
-            lim.values[2] = 80.0f;             // release
+            lim.values[0] = 0.0f;     // input gain
+            lim.values[1] = ceiling;
+            lim.values[2] = 80.0f;    // release
             chain.push_back (lim);
 
             auto processors = ProcessorChain::create (chain);
             return render (audio, *processors, store, {}, control.part (from, to));
         };
 
-        auto first = runPass (gainDb, 0.3, 0.6);
-        if (first.getNumChannels() == 0)
-            return result;
+        constexpr int maxPasses = 4;
+        auto ceiling = peakLimit - 0.5f;
 
-        auto firstStats = analysed (first, 0.6, 0.7);
-        if (! firstStats.valid)
-            return result;
-
-        // The limiter took a little loudness away: add it back once.
-        const auto correction = target - firstStats.integratedLufs;
-        if (std::abs (correction) < 0.1f)
+        for (int pass = 0; pass < maxPasses; ++pass)
         {
+            const auto from = 0.3 + 0.7 * pass / maxPasses;
+            const auto step = 0.7 / maxPasses;
+
+            auto processed = runPass (gainDb, ceiling, from, from + step * 0.7);
+            if (processed.getNumChannels() == 0)
+                return result;
+
+            const auto stats = analysed (processed, from + step * 0.7, from + step);
+            if (! stats.valid)
+                return result;
+
             result.gainDb = gainDb;
-            result.audio = first;
-            result.after = firstStats;
-            return result;
+            result.audio = processed;
+            result.after = stats;
+
+            const auto peakOver = stats.truePeakDb - peakLimit;
+            const auto correction = target - stats.integratedLufs;
+            if (peakOver <= 0.0f && std::abs (correction) < 0.1f)
+                break;
+
+            if (peakOver > 0.0f)
+                ceiling -= peakOver + 0.1f;
+            gainDb += correction;
         }
 
-        gainDb += correction;
-        auto second = runPass (gainDb, 0.7, 0.95);
-        if (second.getNumChannels() == 0)
-            return result;
-
-        result.gainDb = gainDb;
-        result.audio = second;
-        result.after = analysed (second, 0.95, 1.0);
+        result.peakLimitReached = result.after.truePeakDb > peakLimit;
         return result;
     }
 }

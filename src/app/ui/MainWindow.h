@@ -2,6 +2,7 @@
 #pragma once
 
 #include "app/AppContext.h"
+#include "app/Workspace.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -14,7 +15,7 @@ namespace mxj
     class MainWindow : public juce::DocumentWindow
     {
     public:
-        MainWindow (AppContext& context, std::function<void()> onQuit);
+        MainWindow (AppContext& context, Workspace& workspace, std::function<void()> onQuit);
         ~MainWindow() override;
 
         void closeButtonPressed() override;
@@ -25,8 +26,13 @@ namespace mxj
         /** Saves the window position and size to the settings. */
         void storeWindowState();
 
+        MainComponent* getMainComponent() const noexcept { return mainComponent; }
+
     private:
+        void updateTitle();
+
         AppContext& context;
+        Workspace& workspace;
         std::function<void()> onQuit;
         MainComponent* mainComponent = nullptr;
 

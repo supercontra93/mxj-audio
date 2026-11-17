@@ -12,11 +12,11 @@ decision record in `docs/adr/` and a new row here.
 
 | Component | Version | Licence | Source | Used for |
 |---|---|---|---|---|
-| JUCE | 9.0.5 | AGPL-3.0-only (chosen option of a dual licence) | https://github.com/juce-framework/JUCE | Application framework, UI, audio devices, file formats |
+| JUCE | 9.0.5 | AGPL-3.0-only (chosen option of a dual licence) | https://github.com/juce-framework/JUCE | Application framework, UI, audio devices, file formats (WAV, AIFF and MP3 decoding are JUCE's own code) |
 | ASIO SDK headers (bundled in JUCE) | as bundled in JUCE 9.0.5 | GPL-3.0-only (chosen option of a dual licence) | Steinberg, via JUCE `JUCE.spdx.json` | ASIO audio driver support on Windows |
-| Third-party code bundled inside the JUCE modules we compile (FLAC, Ogg/Vorbis, Opus, zlib, libpng, jpeglib, HarfBuzz, SheenBidi, ...) | as bundled in JUCE 9.0.5 | BSD-3-Clause, Zlib, MIT, IJG, libpng, Apache-2.0 (see `JUCE.spdx.json`) | https://github.com/juce-framework/JUCE/blob/9.0.5/JUCE.spdx.json | Inside JUCE |
+| Third-party code bundled inside the JUCE modules we compile (FLAC, Ogg/Vorbis and Opus decoders used to open files since 0.1, zlib, libpng, jpeglib, HarfBuzz, SheenBidi, ...) | as bundled in JUCE 9.0.5 | BSD-3-Clause, Zlib, MIT, IJG, libpng, Apache-2.0 (see `JUCE.spdx.json`) | https://github.com/juce-framework/JUCE/blob/9.0.5/JUCE.spdx.json | Inside JUCE |
 | IBM Plex Sans, IBM Plex Mono | 2017-2018 release in IBM/plex master | SIL Open Font License 1.1 | https://github.com/IBM/plex | Interface fonts (`resources/fonts/`) |
-| Phosphor Icons (regular) | core main | MIT | https://github.com/phosphor-icons/core | Icons (`resources/icons/`) |
+| Phosphor Icons (regular) | core main | MIT | https://github.com/phosphor-icons/core | Icons (`resources/icons/`), incl. transport and zoom icons added in 0.1 |
 
 ASIO is a trademark and software of Steinberg Media Technologies GmbH.
 
@@ -26,6 +26,7 @@ ASIO is a trademark and software of Steinberg Media Technologies GmbH.
 |---|---|---|---|
 | CMake | 3.22 or newer | BSD-3-Clause | https://cmake.org |
 | Catch2 | 3.16.1 | BSL-1.0 | https://github.com/catchorg/Catch2 |
+| FFmpeg (developer tool, used once) | - | LGPL/GPL | https://ffmpeg.org | Made the 1 second test file `tests/data/sine440-stereo-1s.mp3`; not used by the build |
 | GitHub Actions (public repository) | - | free for public repositories | https://github.com/features/actions |
 
 ## Planned for later phases (licence already verified, not yet in the code)

@@ -14,7 +14,7 @@ namespace mxj
     public:
         using RunCommand = std::function<void (const CommandId&)>;
 
-        StartPage (const CommandRegistry& commands, RunCommand runCommand);
+        StartPage (const CommandRegistry& commands, RunCommand runCommand, std::function<juce::String()> describeAudioDevice);
         ~StartPage() override;
 
         void paint (juce::Graphics&) override;
@@ -26,6 +26,8 @@ namespace mxj
         juce::Rectangle<int> centrePanel, sidePanel, recentArea;
         juce::OwnedArray<Tile> tiles;
         std::unique_ptr<juce::Drawable> logo;
+        std::function<juce::String()> describeDevice;
+        std::unique_ptr<juce::TextButton> deviceButton;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StartPage)
     };

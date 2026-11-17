@@ -3,6 +3,14 @@
 configure_file(Version.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/core/Version.h" @ONLY)
 
 add_library(mxj_core STATIC
+    audio/AudioSequence.cpp
+    audio/AudioSequence.h
+    audio/BlockStore.cpp
+    audio/BlockStore.h
+    audio/PeakCache.cpp
+    audio/PeakCache.h
+    audio/SampleSource.cpp
+    audio/SampleSource.h
     commands/CommandRegistry.cpp
     commands/CommandRegistry.h
     commands/CommandInfo.h

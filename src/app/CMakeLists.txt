@@ -10,6 +10,13 @@ juce_add_binary_data(mxj_resources
         ${PROJECT_SOURCE_DIR}/resources/icons/plus.svg
         ${PROJECT_SOURCE_DIR}/resources/icons/folder-open.svg
         ${PROJECT_SOURCE_DIR}/resources/icons/rows.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/play.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/stop.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/skip-back.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/skip-forward.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/magnifying-glass-plus.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/magnifying-glass-minus.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/arrows-out-line-horizontal.svg
         ${PROJECT_SOURCE_DIR}/resources/logo.svg
         ${PROJECT_SOURCE_DIR}/resources/i18n/tr.txt)
 set_target_properties(mxj_resources PROPERTIES FOLDER "MXJ")
@@ -18,6 +25,16 @@ add_library(mxj_app STATIC
     AppContext.h
     AppCommands.cpp
     AppCommands.h
+    Workspace.cpp
+    Workspace.h
+    document/AudioDocument.cpp
+    document/AudioDocument.h
+    editor/EditorPage.cpp
+    editor/EditorPage.h
+    editor/WaveformView.cpp
+    editor/WaveformView.h
+    settings/AudioSettingsPanel.cpp
+    settings/AudioSettingsPanel.h
     theme/Palette.h
     theme/Fonts.cpp
     theme/Fonts.h

@@ -55,7 +55,8 @@ python3 tools/check_layers.py
 
 The program is `build/src/app/MXJAudio_artefacts/<Config>/MXJ AUDIO(.exe)`.
 Options: `--data-dir <folder>` (settings and logs go there instead of `%APPDATA%\MXJ AUDIO`),
-`--smoke-test` (start, open the window, quit after 2 s with exit code 0).
+`--smoke-test` (start, open the window, quit after 2 s with exit code 0; with a file argument it waits
+until the file has loaded instead), `<file>` (open this audio file).
 
 On Linux (portability check only) install the packages listed in `.github/workflows/ci.yml`.
 

@@ -6,11 +6,14 @@
 
 ---
 
-**Status: phase 0 (foundation).** The program opens an empty window with menus, a start page and
-Turkish/English interface. Audio editing starts in version 0.1. See the [roadmap](docs/master-plan.md).
+**Status: version 0.1 (phase 1, audio core).** Opens WAV, AIFF, FLAC, MP3, Ogg Vorbis and Opus files
+(an hour-long WAV in under a second), shows the waveform with smooth zoom down to single samples,
+plays through WASAPI or ASIO and has audio device settings. Editing arrives in 0.2.
+See the [roadmap](docs/master-plan.md).
 
-**Durum: Faz 0 (temel).** Program menüleri, başlangıç sayfası ve Türkçe/İngilizce arayüzü olan boş bir
-pencere açıyor. Ses düzenleme 0.1 sürümüyle başlıyor.
+**Durum: Sürüm 0.1 (Faz 1, ses çekirdeği).** WAV, AIFF, FLAC, MP3, Ogg Vorbis ve Opus dosyalarını açar
+(1 saatlik WAV bir saniyeden kısa sürede), dalga formunu tek örneğe kadar yakınlaştırarak gösterir,
+WASAPI veya ASIO ile çalar ve ses aygıtı ayarları vardır. Düzenleme 0.2 sürümünde geliyor.
 
 ## Goals / Hedefler
 

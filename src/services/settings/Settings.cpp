@@ -21,6 +21,8 @@ namespace mxj
             // Off by default: update checks only exist in official release builds (phase 8).
             d.set (keys::updateCheckOnStart, false);
             d.set (keys::updateChannel,      "stable");
+            d.set (keys::audioDeviceState,   juce::String());
+            d.set (keys::lastOpenFolder,     juce::String());
             return d;
         }();
 

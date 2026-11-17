@@ -64,7 +64,7 @@ namespace mxj
             const bool enabled = info.isEnabled == nullptr || info.isEnabled();
             setEnabled (enabled);
             setTooltip (enabled ? TRANS (info.description)
-                                : TRANS (info.description) + " - " + TRANS ("arrives in version 0.1"));
+                                : TRANS (info.description) + " - " + TRANS ("arrives in a later version"));
             onClick = [id = info.id, run] { run (id); };
         }
 
@@ -101,8 +101,8 @@ namespace mxj
     };
 
     //==============================================================================
-    StartPage::StartPage (const CommandRegistry& commands, RunCommand runCommand)
-        : logo (icons::createLogo())
+    StartPage::StartPage (const CommandRegistry& commands, RunCommand runCommand, std::function<juce::String()> describeAudioDevice)
+        : logo (icons::createLogo()), describeDevice (std::move (describeAudioDevice))
     {
         struct TileSpec { const char* command; const char* icon; juce::Colour colour; };
 
@@ -115,6 +115,14 @@ namespace mxj
         for (const auto& s : specs)
             if (const auto* info = commands.find (s.command))
                 addAndMakeVisible (tiles.add (new Tile (*info, s.icon, s.colour, runCommand)));
+
+        if (const auto* info = commands.find ("settings.audioDevices"))
+        {
+            deviceButton = std::make_unique<juce::TextButton> (TRANS (info->name));
+            deviceButton->setWantsKeyboardFocus (false);
+            deviceButton->onClick = [id = info->id, runCommand] { runCommand (id); };
+            addAndMakeVisible (*deviceButton);
+        }
     }
 
     StartPage::~StartPage() = default;
@@ -140,6 +148,9 @@ namespace mxj
 
         content.removeFromTop (28);
         recentArea = content;
+
+        if (deviceButton != nullptr)
+            deviceButton->setBounds (sidePanel.reduced (16, 14).withTrimmedTop (24 + 4 * 22 + 14 + 24 + 70).withHeight (28));
     }
 
     void StartPage::paint (juce::Graphics& g)
@@ -189,7 +200,7 @@ namespace mxj
         drawSectionHeading (g, TRANS ("Audio device"), side.removeFromTop (24));
         g.setColour (palette::textDim);
         g.setFont (fonts::sans (12.5f));
-        g.drawFittedText (TRANS ("Audio device settings arrive in version 0.1."),
-                          side.removeFromTop (40), juce::Justification::topLeft, 3);
+        g.drawFittedText (describeDevice != nullptr ? describeDevice().replace (" - ", "\n") : juce::String(),
+                          side.removeFromTop (64), juce::Justification::topLeft, 4);
     }
 }

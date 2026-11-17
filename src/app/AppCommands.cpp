@@ -37,9 +37,9 @@ namespace mxj
                  nullptr, actions.showAudioSettings });
 
         // View
-        c.add ({ "view.zoomIn",   "Zoom In",            "View", "Show the waveform in more detail",       "=",  hasFile, [&w] { w.zoomIn(); } });
-        c.add ({ "view.zoomOut",  "Zoom Out",           "View", "Show more of the waveform",              "-",  hasFile, [&w] { w.zoomOut(); } });
-        c.add ({ "view.zoomFull", "Zoom to Whole File", "View", "Fit the whole file into the window",     "\\", hasFile, [&w] { w.zoomToFit(); } });
+        c.add ({ "view.zoomIn",   "Zoom In",            "View", "Show the waveform in more detail",       "command + 1", hasFile, [&w] { w.zoomIn(); } });
+        c.add ({ "view.zoomOut",  "Zoom Out",           "View", "Show more of the waveform",              "command + 3", hasFile, [&w] { w.zoomOut(); } });
+        c.add ({ "view.zoomFull", "Zoom to Whole File", "View", "Fit the whole file into the window",     "command + F", hasFile, [&w] { w.zoomToFit(); } });
         c.add ({ "view.language.tr", "Turkish", "View", "Show the interface in Turkish", {},
                  nullptr, [setLanguage = actions.setLanguage] { setLanguage ("tr"); },
                  [] { return Localisation::getCurrentLanguage() == "tr"; } });

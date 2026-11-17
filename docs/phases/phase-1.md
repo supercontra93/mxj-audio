@@ -33,8 +33,8 @@ Windows decoders, recent files, more than two playback channels (`docs/later.md`
 | Ctrl+W | Close |
 | Space | Play / Stop |
 | Home / End | Go to start / end |
-| `=` / `-` | Zoom in / out |
-| `\` | Zoom to whole file |
+| Ctrl+1 / Ctrl+3 | Zoom in / out (as in Audacity; digits sit in the same place on every keyboard layout) |
+| Ctrl+F | Zoom to whole file |
 | Ctrl + mouse wheel | Zoom around the mouse |
 | Mouse wheel | Scroll |
 
@@ -51,7 +51,7 @@ CI'nin ürettiği zip'i indirip şunları dene:
    ve çizgi başladığı yere döner.
 5. Dalga formunda bir yere tıkla, boşluk ile oradan çal. Çalarken başka bir yere tıkla: oradan devam etmeli.
 6. Ctrl + fare tekerleği ile yakınlaş: en yakında tek tek örnek noktaları görünmeli. Tekerlek ile sağa sola kay,
-   `\` tuşu ile tüm dosyaya dön.
+   Ctrl+F ile tüm dosyaya dön. Ctrl+1 yakınlaştırır, Ctrl+3 uzaklaştırır.
 7. Bir MP3 ve bir FLAC dosyası aç (dosyayı pencereye sürükleyip bırakmak da olur). Uzun dosyada açılırken
    dalga formu soldan sağa dolar, yüzde yazar.
 8. Mümkünse 1 saatlik bir WAV aç: birkaç saniyeden kısa sürede açılmalı. Kapatıp yeniden açınca anında açılmalı.

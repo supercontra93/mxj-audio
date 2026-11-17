@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  layers:
+    name: Layer rule
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/check_layers.py
+
+  windows:
+    name: Windows x64 (build, tests, smoke test)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DMXJ_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Smoke test (program starts, opens its window and quits cleanly)
+        shell: pwsh
+        run: |
+          $exe  = "build/src/app/MXJAudio_artefacts/Release/MXJ AUDIO.exe"
+          $data = Join-Path $env:RUNNER_TEMP "mxj-data"
+          $p = Start-Process -FilePath $exe -ArgumentList "--smoke-test", "--data-dir", $data -PassThru
+          $null = $p.Handle   # needed so ExitCode is available afterwards
+          if (-not $p.WaitForExit(60000)) { $p.Kill(); throw "MXJ AUDIO did not quit within 60 seconds" }
+          Get-Content (Join-Path $data "logs/*.log")
+          if ($p.ExitCode -ne 0) { throw "MXJ AUDIO exited with code $($p.ExitCode)" }
+          if (-not (Select-String -Path (Join-Path $data "logs/*.log") -Pattern "Smoke test passed" -Quiet)) {
+            throw "The log does not say 'Smoke test passed'"
+          }
+
+      - name: Package (portable folder)
+        run: cmake --install build --config Release --prefix dist/MXJ-AUDIO
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MXJ-AUDIO-windows-x64
+          path: dist/MXJ-AUDIO
+          retention-days: 30
+
+  linux:
+    # Not a release target before v1.0. Built to keep the code portable
+    # (the macOS port after v1.0 relies on that).
+    name: Linux portability check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build xvfb libasound2-dev libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev \
+            libxrender-dev libxi-dev libgl1-mesa-dev
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMXJ_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Unit tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Smoke test
+        run: |
+          timeout 60 xvfb-run -a "build/src/app/MXJAudio_artefacts/Release/MXJ AUDIO" --smoke-test --data-dir "$RUNNER_TEMP/mxj-data"
+          grep -q "Smoke test passed" "$RUNNER_TEMP"/mxj-data/logs/*.log

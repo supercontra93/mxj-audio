@@ -1,5 +1,8 @@
 add_executable(mxj_tests
     AudioModelTests.cpp
+    EditTests.cpp
+    ExportTests.cpp
+    RecorderTests.cpp
     CommandRegistryTests.cpp
     ImportTests.cpp
     PlaybackTests.cpp

@@ -72,7 +72,8 @@ namespace mxj
     };
 
     //==============================================================================
-    WaveformView::WaveformView (Workspace& w) : workspace (w), playhead (std::make_unique<Playhead>())
+    WaveformView::WaveformView (Workspace& w, const CommandRegistry& c, RunCommand r)
+        : workspace (w), commands (c), run (std::move (r)), playhead (std::make_unique<Playhead>())
     {
         setOpaque (true);
         addAndMakeVisible (*playhead);
@@ -105,7 +106,7 @@ namespace mxj
 
         // While the file loads, the waveform grows from left to right.
         const auto* doc = workspace.getDocument();
-        const bool loading = doc != nullptr && doc->getState() == AudioDocument::State::loading;
+        const bool loading = doc != nullptr && doc->isLoading();
         if (loading || wasLoading)
             repaint();
         wasLoading = loading;
@@ -151,7 +152,7 @@ namespace mxj
         if (doc == nullptr)
             return;
 
-        const int channels = doc->getInfo().numChannels;
+        const int channels = doc->getNumChannels();
         auto lanes = getLanesArea();
         const int laneHeight = (lanes.getHeight() - laneGap * (channels - 1)) / juce::jmax (1, channels);
 
@@ -164,10 +165,13 @@ namespace mxj
                 paintLane (g, lane, c, clipLeft, clipRight);
         }
 
+        paintSelection (g);
+        paintMarkers (g, clipLeft, clipRight);
+
         // Unloaded part while opening.
-        if (doc->getState() == AudioDocument::State::loading)
+        if (doc->isLoading() && doc->getLoadingPeaks() != nullptr)
         {
-            const auto readyX = frameToX ((double) doc->getPeaks()->getFramesReady());
+            const auto readyX = frameToX ((double) doc->getLoadingPeaks()->getFramesReady());
             if (readyX < (float) getWidth())
             {
                 const auto rest = getLanesArea().toFloat().withTrimmedLeft (juce::jmax (0.0f, readyX));
@@ -192,8 +196,10 @@ namespace mxj
         if (doc == nullptr)
             return;
 
-        const auto rate = doc->getInfo().sampleRate;
+        const auto rate = doc->getSampleRate();
         const auto& v = workspace.getView();
+        if (rate <= 0)
+            return;
         const auto pixelsPerSecond = rate / v.framesPerPixel;
 
         double step = rulerSteps[std::size (rulerSteps) - 1];
@@ -243,7 +249,7 @@ namespace mxj
         g.fillRect (juce::Rectangle<float> ((float) clipLeft, mid + half * 0.5f, (float) (clipRight - clipLeft), 1.0f));
 
         // End of file.
-        const auto endX = frameToX ((double) doc->getInfo().numFrames);
+        const auto endX = frameToX ((double) doc->getLength());
         if (endX < (float) clipRight)
         {
             g.setColour (palette::background);
@@ -260,7 +266,7 @@ namespace mxj
         // Channel label.
         if (clipLeft < 40)
         {
-            const auto channels = doc->getInfo().numChannels;
+            const auto channels = doc->getNumChannels();
             const auto label = channels == 2 ? (channel == 0 ? "L" : "R") : juce::String (channel + 1);
             g.setColour (palette::textDim);
             g.setFont (fonts::sansBold (11.0f));
@@ -270,7 +276,9 @@ namespace mxj
 
     void WaveformView::paintPeaks (juce::Graphics& g, juce::Rectangle<int> lane, int channel, int clipLeft, int clipRight)
     {
-        const auto peaks = workspace.getDocument()->getPeaks();
+        const auto* doc = workspace.getDocument();
+        const auto loadingPeaks = doc->isLoading() ? doc->getLoadingPeaks() : nullptr;
+        const auto& audio = doc->getAudio();
         const auto mid = (float) lane.getCentreY();
         const auto half = (float) lane.getHeight() * 0.5f - 2.0f;
         g.setColour (palette::accent);
@@ -281,7 +289,9 @@ namespace mxj
             const auto end = juce::jmax (start + 1, (juce::int64) std::floor (xToFrame ((float) x + 1.0f)));
             float lo, hi;
 
-            if (! peaks->getMinMax (channel, start, end, lo, hi))
+            const bool known = loadingPeaks != nullptr ? loadingPeaks->getMinMax (channel, start, end, lo, hi)
+                                                       : audio.getMinMax (channel, start, end, lo, hi);
+            if (! known)
                 continue;
 
             const auto top = mid - juce::jlimit (-1.0f, 1.0f, hi) * half;
@@ -294,7 +304,7 @@ namespace mxj
     {
         const auto* doc = workspace.getDocument();
         const auto& v = workspace.getView();
-        const auto& seq = doc->getSequence();
+        const auto& seq = doc->getAudio();
 
         const auto mid = (float) lane.getCentreY();
         const auto half = (float) lane.getHeight() * 0.5f - 2.0f;
@@ -348,17 +358,227 @@ namespace mxj
     }
 
     //==============================================================================
+    void WaveformView::paintSelection (juce::Graphics& g)
+    {
+        const auto sel = workspace.getSelection();
+        if (sel.isEmpty())
+            return;
+
+        const auto left = juce::jmax (-2.0f, frameToX ((double) sel.getStart()));
+        const auto right = juce::jmin ((float) getWidth() + 2.0f, frameToX ((double) sel.getEnd()));
+        if (right < 0.0f || left > (float) getWidth())
+            return;
+
+        const auto area = juce::Rectangle<float> (left, 0.0f, juce::jmax (1.0f, right - left), (float) getHeight());
+        g.setColour (palette::selection);
+        g.fillRect (area);
+        g.setColour (palette::playhead.withAlpha (0.7f));
+        g.fillRect (area.withWidth (1.0f));
+        g.fillRect (area.withX (area.getRight() - 1.0f).withWidth (1.0f));
+    }
+
+    void WaveformView::paintMarkers (juce::Graphics& g, int clipLeft, int clipRight)
+    {
+        const auto* doc = workspace.getDocument();
+        const auto& markers = doc->getMarkers();
+        const auto selected = workspace.getSelectedMarker();
+        g.setFont (fonts::sansBold (11.0f));
+
+        for (int i = 0; i < (int) markers.size(); ++i)
+        {
+            const auto& m = markers[(size_t) i];
+            const auto x = frameToX ((double) m.position);
+            const auto labelWidth = (float) juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), m.name) + 10.0f;
+            if (x + labelWidth + 12.0f < (float) clipLeft || x - 2.0f > (float) clipRight)
+                continue;
+
+            const auto colour = i == selected ? palette::text : palette::accent;
+
+            // Dashed line through the lanes.
+            g.setColour (colour.withAlpha (0.55f));
+            for (float y = (float) rulerHeight; y < (float) getHeight(); y += 6.0f)
+                g.fillRect (juce::Rectangle<float> (x, y, 1.0f, 3.0f));
+
+            // Flag with the name in the ruler.
+            const auto flag = juce::Rectangle<float> (x, 2.0f, labelWidth, (float) rulerHeight - 10.0f);
+            g.setColour (colour);
+            g.fillRect (flag);
+            g.fillRect (juce::Rectangle<float> (x, 0.0f, 1.0f, (float) rulerHeight));
+            g.setColour (palette::onAccent);
+            g.drawText (m.name, flag.withTrimmedLeft (5.0f), juce::Justification::centredLeft, false);
+        }
+    }
+
+    juce::int64 WaveformView::frameAt (int x) const
+    {
+        const auto* doc = workspace.getDocument();
+        const auto length = doc != nullptr ? doc->getLength() : 0;
+        return juce::jlimit ((juce::int64) 0, length, (juce::int64) std::llround (xToFrame ((float) x)));
+    }
+
+    int WaveformView::markerAt (int x) const
+    {
+        const auto* doc = workspace.getDocument();
+        if (doc == nullptr)
+            return -1;
+
+        const auto& markers = doc->getMarkers();
+        for (int i = (int) markers.size(); --i >= 0;)
+        {
+            const auto mx = frameToX ((double) markers[(size_t) i].position);
+            if ((float) x >= mx - 4.0f && (float) x <= mx + 12.0f)
+                return i;
+        }
+
+        return -1;
+    }
+
+    void WaveformView::mouseMove (const juce::MouseEvent& e)
+    {
+        if (! workspace.isReady())
+            return;
+
+        if (e.y < rulerHeight)
+        {
+            setMouseCursor (markerAt (e.x) >= 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+            return;
+        }
+
+        // Near an edge of the selection: it can be dragged.
+        const auto sel = workspace.getSelection();
+        const bool nearEdge = ! sel.isEmpty()
+                           && (std::abs ((float) e.x - frameToX ((double) sel.getStart())) < 5.0f
+                               || std::abs ((float) e.x - frameToX ((double) sel.getEnd())) < 5.0f);
+        setMouseCursor (nearEdge ? juce::MouseCursor::LeftRightResizeCursor : juce::MouseCursor::IBeamCursor);
+    }
+
     void WaveformView::mouseDown (const juce::MouseEvent& e)
     {
-        if (workspace.hasDocument())
-            workspace.setCursor ((juce::int64) std::llround (xToFrame ((float) e.x)));
+        drag = Drag::none;
+
+        if (! workspace.hasDocument())
+            return;
+
+        if (e.mods.isPopupMenu())
+        {
+            if (e.y < rulerHeight)
+                if (const auto m = markerAt (e.x); m >= 0)
+                    workspace.selectMarker (m);
+
+            showContextMenu();
+            return;
+        }
+
+        if (! workspace.isReady() || workspace.isRecording())
+            return;
+
+        if (e.y < rulerHeight)
+        {
+            if (const auto m = markerAt (e.x); m >= 0)
+            {
+                workspace.selectMarker (m);
+                return;
+            }
+        }
+
+        const auto frame = frameAt (e.x);
+        const auto sel = workspace.getSelection();
+
+        if (e.mods.isShiftDown())
+        {
+            // Extend the selection (or select from the cursor) to the click.
+            dragAnchor = sel.isEmpty() ? workspace.getCursor()
+                       : (std::abs (frame - sel.getStart()) < std::abs (frame - sel.getEnd()) ? sel.getEnd() : sel.getStart());
+            drag = Drag::select;
+            workspace.setSelection ({ juce::jmin (dragAnchor, frame), juce::jmax (dragAnchor, frame) });
+            return;
+        }
+
+        if (! sel.isEmpty() && std::abs ((float) e.x - frameToX ((double) sel.getStart())) < 5.0f)
+        {
+            drag = Drag::select;
+            dragAnchor = sel.getEnd();
+            return;
+        }
+
+        if (! sel.isEmpty() && std::abs ((float) e.x - frameToX ((double) sel.getEnd())) < 5.0f)
+        {
+            drag = Drag::select;
+            dragAnchor = sel.getStart();
+            return;
+        }
+
+        drag = Drag::select;
+        dragAnchor = frame;
+        workspace.setCursor (frame);
     }
 
     void WaveformView::mouseDrag (const juce::MouseEvent& e)
     {
-        // Selection arrives in phase 2; for now dragging scrubs the cursor (without restarting playback).
-        if (workspace.hasDocument() && ! workspace.isPlaying())
-            workspace.setCursor ((juce::int64) std::llround (xToFrame ((float) e.x)));
+        if (drag != Drag::select || ! workspace.isReady() || e.getDistanceFromDragStart() < 3)
+            return;
+
+        // Dragging past an edge scrolls the view.
+        if (e.x < 0 || e.x > getWidth())
+        {
+            auto v = workspace.getView();
+            v.startFrame += (double) (e.x < 0 ? e.x : e.x - getWidth()) * v.framesPerPixel * 0.5;
+            workspace.setView (v);
+        }
+
+        const auto frame = frameAt (juce::jlimit (0, getWidth(), e.x));
+        workspace.setSelection ({ juce::jmin (dragAnchor, frame), juce::jmax (dragAnchor, frame) });
+    }
+
+    void WaveformView::mouseUp (const juce::MouseEvent&)
+    {
+        drag = Drag::none;
+    }
+
+    void WaveformView::mouseDoubleClick (const juce::MouseEvent& e)
+    {
+        if (e.y < rulerHeight)
+        {
+            if (markerAt (e.x) >= 0)
+                run ("markers.rename");
+            return;
+        }
+
+        // Double click selects what is visible, as in Audition.
+        if (workspace.isReady())
+        {
+            const auto& v = workspace.getView();
+            workspace.setSelection ({ (juce::int64) v.startFrame, (juce::int64) (v.startFrame + v.framesPerPixel * getWidth()) });
+        }
+    }
+
+    void WaveformView::showContextMenu()
+    {
+        juce::PopupMenu menu;
+
+        auto add = [&] (const char* id)
+        {
+            if (const auto* info = commands.find (id))
+            {
+                juce::PopupMenu::Item item (TRANS (info->name));
+                item.setEnabled (commands.isEnabled (id));
+                if (info->defaultShortcut.isNotEmpty())
+                    item.shortcutKeyDescription = juce::KeyPress::createFromDescription (info->defaultShortcut).getTextDescriptionWithIcons();
+                item.setAction ([this, cmd = juce::String (id)] { run (cmd); });
+                menu.addItem (item);
+            }
+        };
+
+        for (const auto* id : { "edit.cut", "edit.copy", "edit.paste", "edit.mixPaste", "edit.delete" })
+            add (id);
+        menu.addSeparator();
+        for (const auto* id : { "edit.selectAll", "edit.trim", "edit.silence", "edit.fadeIn", "edit.fadeOut" })
+            add (id);
+        menu.addSeparator();
+        for (const auto* id : { "markers.add", "markers.rename", "markers.delete" })
+            add (id);
+
+        menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
     }
 
     void WaveformView::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel)

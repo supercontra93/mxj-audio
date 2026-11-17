@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "formats/import/AudioFileFormats.h"
+#include "formats/metadata/CueMarkers.h"
 
 #include <mutex>
 
@@ -66,8 +67,10 @@ namespace mxj::audioFormats
         info.sampleRate = reader->sampleRate;
         info.numFrames = reader->lengthInSamples;
         info.bitsPerSample = (int) reader->bitsPerSample;
+        info.usesFloat = reader->usesFloatingPointData;
         info.isUncompressed = dynamic_cast<juce::WavAudioFormat*> (getManager().findFormatForFileExtension (file.getFileExtension())) != nullptr
                            || dynamic_cast<juce::AiffAudioFormat*> (getManager().findFormatForFileExtension (file.getFileExtension())) != nullptr;
+        info.markers = cueMarkers::read (reader->metadataValues, info.numFrames);
         return true;
     }
 }

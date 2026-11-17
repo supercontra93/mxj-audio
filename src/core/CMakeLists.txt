@@ -7,13 +7,20 @@ add_library(mxj_core STATIC
     audio/AudioSequence.h
     audio/BlockStore.cpp
     audio/BlockStore.h
+    audio/DerivedSources.cpp
+    audio/DerivedSources.h
     audio/PeakCache.cpp
     audio/PeakCache.h
     audio/SampleSource.cpp
     audio/SampleSource.h
+    audio/SequenceSerializer.cpp
+    audio/SequenceSerializer.h
     commands/CommandRegistry.cpp
     commands/CommandRegistry.h
     commands/CommandInfo.h
+    edit/AudioState.h
+    edit/EditOperations.cpp
+    edit/EditOperations.h
     history/History.cpp
     history/History.h
     Version.h.in)

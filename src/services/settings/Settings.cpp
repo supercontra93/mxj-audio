@@ -23,6 +23,13 @@ namespace mxj
             d.set (keys::updateChannel,      "stable");
             d.set (keys::audioDeviceState,   juce::String());
             d.set (keys::lastOpenFolder,     juce::String());
+            d.set (keys::lastSaveFolder,     juce::String());
+            d.set (keys::recordInputDevice,  juce::String());
+            d.set (keys::recordFirstChannel, 0);
+            d.set (keys::recordChannels,     1);
+            d.set (keys::exportFormat,       "wav");
+            d.set (keys::exportBits,         24);
+            d.set (keys::exportQuality,      -1);
             return d;
         }();
 

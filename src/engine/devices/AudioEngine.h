@@ -2,6 +2,7 @@
 #pragma once
 
 #include "engine/playback/PlaybackEngine.h"
+#include "engine/recording/Recorder.h"
 
 #include <juce_audio_devices/juce_audio_devices.h>
 
@@ -20,9 +21,11 @@ namespace mxj
         AudioEngine();
         ~AudioEngine();
 
-        /** Opens the device described by `savedState` (may be empty). Phase 1
-            opens outputs only; recording arrives in phase 2. Returns an error
-            message, or an empty string when a device is running. */
+        /** Opens the device described by `savedState` (may be empty). Only the
+            outputs are opened: inputs are switched on just while recording, so
+            the microphone is not in use (and Windows shows no microphone icon)
+            the rest of the time. Returns an error message, or an empty string
+            when a device is running. */
         juce::String initialise (const juce::String& savedState);
 
         /** The current device choice, for the settings file. */
@@ -33,6 +36,31 @@ namespace mxj
 
         juce::AudioDeviceManager& getDeviceManager() noexcept { return deviceManager; }
         PlaybackEngine& getPlayback() noexcept               { return playback; }
+        Recorder& getRecorder() noexcept                     { return recorder; }
+
+        //==============================================================================
+        /** Where recording takes its audio from. */
+        struct InputChoice
+        {
+            juce::String deviceName; ///< Windows Audio: input device; empty = the system default. ASIO: ignored.
+            int firstChannel = 0;    ///< first input channel of the device
+            int numChannels = 1;     ///< 1 = mono, 2 = stereo
+        };
+
+        /** Input devices of the current driver type (for ASIO: the open device). */
+        juce::StringArray getInputDeviceNames();
+
+        /** Input channel names of the device that recording would use. */
+        juce::StringArray getInputChannelNames (const juce::String& deviceName);
+
+        /** Switches the inputs on and starts a take in `store`. Returns an error
+            message, or an empty string when recording runs. */
+        juce::String startRecording (BlockStore& store, const InputChoice& input);
+
+        /** Stops the take, switches the inputs off again and returns the take. */
+        AudioSequence stopRecording();
+
+        bool isRecording() const noexcept { return recorder.isRecording(); }
 
         bool hasRunningDevice();
 
@@ -41,7 +69,10 @@ namespace mxj
 
     private:
         juce::AudioDeviceManager deviceManager;
+        void setInputsEnabled (const InputChoice* input, juce::String& error);
+
         PlaybackEngine playback;
+        Recorder recorder;
         bool callbackAdded = false;
 
         JUCE_DECLARE_NON_COPYABLE (AudioEngine)

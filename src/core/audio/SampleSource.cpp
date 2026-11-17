@@ -13,8 +13,22 @@ namespace mxj
                    .getIntersectionWith ({ 0, length });
     }
 
+    bool SampleSource::getMinMax (int channel, juce::int64 startFrame, juce::int64 endFrame,
+                                  float& minOut, float& maxOut) const
+    {
+        return peaks != nullptr && peaks->getMinMax (channel, startFrame, endFrame, minOut, maxOut);
+    }
+
     MemorySampleSource::MemorySampleSource (juce::AudioBuffer<float> data, double sampleRate)
-        : buffer (std::move (data)), rate (sampleRate) {}
+        : buffer (std::move (data)), rate (sampleRate)
+    {
+        auto p = std::make_shared<PeakCache> (buffer.getNumChannels(), buffer.getNumSamples());
+        if (buffer.getNumSamples() > 0)
+            p->append (buffer.getArrayOfReadPointers(), buffer.getNumSamples());
+        else
+            p->finishEarly();
+        setPeaks (std::move (p));
+    }
 
     bool MemorySampleSource::read (float* const* dest, int numDestChannels,
                                    juce::int64 startFrame, int numFrames) const

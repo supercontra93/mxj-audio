@@ -108,6 +108,7 @@ namespace mxj
             Log::info ("Audio device: " + context->audio.describeDevice()
                        + (deviceError.isNotEmpty() ? " (" + deviceError + ")" : juce::String()));
 
+            const auto recoverable = context->findRecoverableRun();
             workspace = std::make_unique<Workspace> (*context);
 
             lookAndFeel = std::make_unique<GrafitLookAndFeel>();
@@ -130,6 +131,8 @@ namespace mxj
 
             if (args.contains ("--smoke-test"))
                 runSmokeTest (file != juce::File());
+            else if (recoverable != juce::File())
+                workspace->offerRecovery (recoverable);
         }
 
         void shutdown() override
@@ -160,7 +163,14 @@ namespace mxj
 
         void systemRequestedQuit() override
         {
-            quit();
+            if (workspace == nullptr || smokeTestStart != 0)
+            {
+                quit();
+                return;
+            }
+
+            // Unsaved changes: ask first (stops a recording, keeping the take).
+            workspace->askToSaveChanges ([] { juce::JUCEApplication::quit(); });
         }
 
         void anotherInstanceStarted (const juce::String&) override {}
@@ -168,7 +178,7 @@ namespace mxj
     private:
         void showAudioSettings()
         {
-            AudioSettingsPanel::show (context->audio, mainWindow.get(), [this]
+            AudioSettingsPanel::show (context->audio, context->settings, mainWindow.get(), [this]
             {
                 if (context == nullptr)
                     return;
@@ -193,7 +203,7 @@ namespace mxj
             const auto elapsed = juce::Time::getMillisecondCounter() - smokeTestStart;
             const auto* doc = workspace != nullptr ? workspace->getDocument() : nullptr;
 
-            if (withFile && doc != nullptr && doc->getState() == AudioDocument::State::loading && elapsed < 50000)
+            if (withFile && doc != nullptr && doc->isLoading() && elapsed < 50000)
             {
                 juce::Timer::callAfterDelay (100, [this, withFile] { smokeTestPoll (withFile); });
                 return;
@@ -211,16 +221,71 @@ namespace mxj
                 {
                     Log::error ("Smoke test failed: the file did not load");
                     setApplicationReturnValue (1);
-                    systemRequestedQuit();
+                    quit();
                     return;
                 }
 
-                Log::info ("Smoke test: file loaded, " + juce::String (doc->getSequence().getNumFrames()) + " frames in "
+                Log::info ("Smoke test: file loaded, " + juce::String (doc->getAudio().getNumFrames()) + " frames in "
                            + juce::String (doc->getLoadSeconds(), 2) + " s");
+                smokeTestEditAndExport();
+                return;
             }
 
             Log::info ("Smoke test passed");
-            systemRequestedQuit();
+            quit();
+        }
+
+        /** Phase 2 part of the smoke test: cut, undo and export through the
+            commands, as a user would, then check the exported file. */
+        void smokeTestEditAndExport()
+        {
+            auto* doc = workspace->getDocument();
+            const auto length = doc->getAudio().getNumFrames();
+            const auto second = (juce::int64) doc->getSampleRate();
+
+            workspace->setSelection ({ 0, second });
+            context->commands.perform ("edit.cut");
+            const bool cutOk = doc->getAudio().getNumFrames() == length - second && doc->isModified();
+            context->commands.perform ("edit.undo");
+            const bool undoOk = doc->getAudio().getNumFrames() == length && ! doc->isModified();
+
+            if (! cutOk || ! undoOk)
+            {
+                Log::error ("Smoke test failed: cut " + juce::String (cutOk ? "ok" : "wrong") + ", undo " + juce::String (undoOk ? "ok" : "wrong"));
+                setApplicationReturnValue (1);
+                quit();
+                return;
+            }
+
+            ExportSettings settings;
+            settings.file = context->paths.getRoot().getChildFile ("smoke-export.flac");
+            settings.format = ExportFormat::flac;
+            settings.bitsPerSample = 16;
+            workspace->exportFile (settings);
+            smokeTestWaitForExport (settings.file, length);
+        }
+
+        void smokeTestWaitForExport (const juce::File& file, juce::int64 expectedFrames)
+        {
+            if (workspace->isBusy() && juce::Time::getMillisecondCounter() - smokeTestStart < 80000)
+            {
+                juce::Timer::callAfterDelay (100, [this, file, expectedFrames] { smokeTestWaitForExport (file, expectedFrames); });
+                return;
+            }
+
+            AudioFileInfo info;
+            juce::String error;
+            if (! audioFormats::readInfo (file, info, error) || info.numFrames != expectedFrames)
+            {
+                Log::error ("Smoke test failed: the exported file is wrong " + error);
+                setApplicationReturnValue (1);
+                quit();
+                return;
+            }
+
+            Log::info ("Smoke test: edit and export OK");
+            Log::info ("Smoke test passed");
+            quit();
         }
 
         void setLanguage (const juce::String& code)

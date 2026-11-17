@@ -68,6 +68,7 @@ namespace mxj
     AudioImporter::Result AudioImporter::readInPlace (const std::function<bool()>& shouldContinue)
     {
         auto source = std::make_shared<FileSampleSource> (info.file, std::move (reader));
+        source->setPeaks (peaks); // drawable while it fills
 
         if (! peaksFromCache)
         {
@@ -142,6 +143,8 @@ namespace mxj
             error = TRANS ("Could not write temporary audio data. Is the disk full?");
             return Result::failed;
         }
+
+        source->setPeaks (peaks);
 
         sequence = AudioSequence::fromSource (source);
         return Result::ok;

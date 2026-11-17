@@ -2,6 +2,7 @@
 #include "app/settings/AudioSettingsPanel.h"
 #include "app/theme/Fonts.h"
 #include "app/theme/Palette.h"
+#include "services/settings/SettingKeys.h"
 
 namespace mxj
 {
@@ -11,13 +12,31 @@ namespace mxj
         constexpr int labelWidth = 150;
         constexpr int padding = 20;
 
-        const char* const labels[] { "Driver type", "Output device", "Sample rate", "Buffer size" };
+        const char* const labels[] { "Driver type", "Output device", "Sample rate", "Buffer size",
+                                     "Recording input", "Input channels" };
     }
 
-    AudioSettingsPanel::AudioSettingsPanel (AudioEngine& e) : engine (e)
+    AudioSettingsPanel::AudioSettingsPanel (AudioEngine& e, Settings& s) : engine (e), settings (s)
     {
-        for (auto* box : { &typeBox, &deviceBox, &rateBox, &bufferBox })
+        for (auto* box : { &typeBox, &deviceBox, &rateBox, &bufferBox, &inputBox, &inputChannelBox })
             addAndMakeVisible (box);
+
+        inputBox.onChange = [this]
+        {
+            // Item 1 is "default".
+            settings.set (keys::recordInputDevice, inputBox.getSelectedId() <= 1 ? juce::String() : inputBox.getText());
+            refreshInputs();
+        };
+
+        inputChannelBox.onChange = [this]
+        {
+            const auto index = inputChannelBox.getSelectedItemIndex();
+            if (juce::isPositiveAndBelow (index, inputChoices.size()))
+            {
+                settings.set (keys::recordFirstChannel, inputChoices[index].first);
+                settings.set (keys::recordChannels, inputChoices[index].second);
+            }
+        };
 
         typeBox.onChange = [this]
         {
@@ -75,7 +94,7 @@ namespace mxj
 
         engine.getDeviceManager().addChangeListener (this);
         refresh();
-        setSize (520, 330);
+        setSize (520, 430);
     }
 
     AudioSettingsPanel::~AudioSettingsPanel()
@@ -94,7 +113,7 @@ namespace mxj
         auto& dm = engine.getDeviceManager();
         auto setup = dm.getAudioDeviceSetup();
         change (setup);
-        setup.inputDeviceName = {}; // recording arrives in phase 2
+        setup.inputDeviceName = {}; // inputs open only while recording (AudioEngine::startRecording)
         setup.useDefaultInputChannels = false;
         setup.inputChannels.clear();
 
@@ -160,7 +179,44 @@ namespace mxj
 
         controlPanelButton.setVisible (device != nullptr && device->hasControlPanel());
         testToneButton.setEnabled (device != nullptr);
+        refreshInputs();
         repaint();
+    }
+
+    void AudioSettingsPanel::refreshInputs()
+    {
+        const auto chosen = settings.getString (keys::recordInputDevice);
+        const auto names = engine.getInputDeviceNames();
+
+        inputBox.clear (juce::dontSendNotification);
+        inputBox.addItem (TRANS ("System default"), 1);
+        for (int i = 0; i < names.size(); ++i)
+            inputBox.addItem (names[i], i + 2);
+
+        const auto index = names.indexOf (chosen);
+        inputBox.setSelectedId (index >= 0 ? index + 2 : 1, juce::dontSendNotification);
+
+        // Mono on each input, and stereo pairs.
+        const auto channelNames = engine.getInputChannelNames (chosen);
+        inputChannelBox.clear (juce::dontSendNotification);
+        inputChoices.clear();
+
+        for (int i = 0; i < channelNames.size(); ++i)
+        {
+            inputChoices.add ({ i, 1 });
+            inputChannelBox.addItem (TRANS ("Mono") + ": " + channelNames[i], inputChoices.size());
+        }
+
+        for (int i = 0; i + 1 < channelNames.size(); i += 2)
+        {
+            inputChoices.add ({ i, 2 });
+            inputChannelBox.addItem (TRANS ("Stereo") + ": " + channelNames[i] + " + " + channelNames[i + 1], inputChoices.size());
+        }
+
+        const std::pair<int, int> current { (int) settings.get (keys::recordFirstChannel), (int) settings.get (keys::recordChannels) };
+        inputChannelBox.setSelectedItemIndex (juce::jmax (0, inputChoices.indexOf (current)), juce::dontSendNotification);
+        inputBox.setEnabled (names.size() > 0);
+        inputChannelBox.setEnabled (inputChoices.size() > 0);
     }
 
     void AudioSettingsPanel::resized()
@@ -168,12 +224,12 @@ namespace mxj
         auto area = getLocalBounds().reduced (padding);
         area.removeFromTop (8);
 
-        for (auto* box : { &typeBox, &deviceBox, &rateBox, &bufferBox })
+        for (auto* box : { &typeBox, &deviceBox, &rateBox, &bufferBox, &inputBox, &inputChannelBox })
         {
             auto row = area.removeFromTop (rowHeight);
             row.removeFromLeft (labelWidth);
             box->setBounds (row);
-            area.removeFromTop (10);
+            area.removeFromTop (box == &bufferBox ? 26 : 10);
         }
 
         area.removeFromTop (4);
@@ -191,11 +247,12 @@ namespace mxj
         area.removeFromTop (8);
         g.setFont (fonts::sans (13.0f));
 
+        int row = 0;
         for (const auto* label : labels)
         {
             g.setColour (palette::textDim);
             g.drawText (TRANS (label), area.removeFromTop (rowHeight).removeFromLeft (labelWidth), juce::Justification::centredLeft);
-            area.removeFromTop (10);
+            area.removeFromTop (row++ == 3 ? 26 : 10);
         }
 
         area.removeFromTop (4 + rowHeight + 16);
@@ -217,12 +274,12 @@ namespace mxj
         }
     }
 
-    void AudioSettingsPanel::show (AudioEngine& engine, juce::Component* parent, std::function<void()> onClosed)
+    void AudioSettingsPanel::show (AudioEngine& engine, Settings& settings, juce::Component* parent, std::function<void()> onClosed)
     {
         // Saves the choice when the window closes.
         struct Holder : public juce::Component
         {
-            Holder (AudioEngine& e, std::function<void()> f) : panel (e), closed (std::move (f))
+            Holder (AudioEngine& e, Settings& s, std::function<void()> f) : panel (e, s), closed (std::move (f))
             {
                 addAndMakeVisible (panel);
                 setSize (panel.getWidth(), panel.getHeight());
@@ -241,7 +298,7 @@ namespace mxj
         };
 
         juce::DialogWindow::LaunchOptions options;
-        options.content.setOwned (new Holder (engine, std::move (onClosed)));
+        options.content.setOwned (new Holder (engine, settings, std::move (onClosed)));
         options.dialogTitle = TRANS ("Audio Device Settings");
         options.dialogBackgroundColour = palette::panel;
         options.componentToCentreAround = parent;

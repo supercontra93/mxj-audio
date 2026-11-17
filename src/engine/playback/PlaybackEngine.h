@@ -31,10 +31,10 @@ namespace mxj
         /** Stops playback and sets what to play. Message thread. */
         void setSequence (AudioSequence sequence);
 
-        /** Starts playing from `startFrame` (in frames of the sequence).
-            Returns false if there is no sequence or no running audio device.
-            Message thread. */
-        bool play (juce::int64 startFrame);
+        /** Starts playing from `startFrame` (in frames of the sequence) up to
+            `endFrame` (-1 = the end). Returns false if there is no sequence or no
+            running audio device. Message thread. */
+        bool play (juce::int64 startFrame, juce::int64 endFrame = -1);
 
         /** Stops playback. Message thread. */
         void stop();

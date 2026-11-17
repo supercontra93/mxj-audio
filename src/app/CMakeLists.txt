@@ -17,6 +17,15 @@ juce_add_binary_data(mxj_resources
         ${PROJECT_SOURCE_DIR}/resources/icons/magnifying-glass-plus.svg
         ${PROJECT_SOURCE_DIR}/resources/icons/magnifying-glass-minus.svg
         ${PROJECT_SOURCE_DIR}/resources/icons/arrows-out-line-horizontal.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/record-fill.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/scissors.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/copy.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/clipboard-text.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/arrow-counter-clockwise.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/arrow-clockwise.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/map-pin.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/floppy-disk.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/export.svg
         ${PROJECT_SOURCE_DIR}/resources/logo.svg
         ${PROJECT_SOURCE_DIR}/resources/i18n/tr.txt)
 set_target_properties(mxj_resources PROPERTIES FOLDER "MXJ")
@@ -29,8 +38,15 @@ add_library(mxj_app STATIC
     Workspace.h
     document/AudioDocument.cpp
     document/AudioDocument.h
+    document/BackgroundJob.h
+    document/RecoveryJournal.cpp
+    document/RecoveryJournal.h
     editor/EditorPage.cpp
     editor/EditorPage.h
+    editor/ExportDialog.cpp
+    editor/ExportDialog.h
+    editor/RecordingPanel.cpp
+    editor/RecordingPanel.h
     editor/WaveformView.cpp
     editor/WaveformView.h
     settings/AudioSettingsPanel.cpp
@@ -51,7 +67,9 @@ add_library(mxj_app STATIC
     ui/StatusBar.cpp
     ui/StatusBar.h
     ui/AboutPanel.cpp
-    ui/AboutPanel.h)
+    ui/AboutPanel.h
+    ui/Dialogs.cpp
+    ui/Dialogs.h)
 
 target_link_libraries(mxj_app PUBLIC mxj_services PRIVATE mxj_resources)
 mxj_configure_target(mxj_app)

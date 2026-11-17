@@ -56,6 +56,17 @@ namespace mxj
         return true;
     }
 
+    juce::var BlockFileSource::describe() const
+    {
+        auto* o = new juce::DynamicObject();
+        o->setProperty ("type", "block");
+        o->setProperty ("path", file.getFullPathName());
+        o->setProperty ("channels", channels);
+        o->setProperty ("rate", rate);
+        o->setProperty ("frames", frames);
+        return juce::var (o);
+    }
+
     //==============================================================================
     BlockStore::Writer::Writer (juce::File f, int numChannels, double sampleRate)
         : file (std::move (f)), channels (numChannels), rate (sampleRate)
@@ -132,8 +143,55 @@ namespace mxj
 
     std::unique_ptr<BlockStore::Writer> BlockStore::createWriter (int numChannels, double sampleRate)
     {
-        const auto name = juce::String (nextFileNumber++).paddedLeft ('0', 6) + ".f32";
-        return std::unique_ptr<Writer> (new Writer (folder.getChildFile (name), numChannels, sampleRate));
+        return std::unique_ptr<Writer> (new Writer (createFileName (".f32"), numChannels, sampleRate));
+    }
+
+    juce::File BlockStore::createFileName (const juce::String& extension)
+    {
+        return folder.getChildFile (juce::String (nextFileNumber++).paddedLeft ('0', 6) + extension);
+    }
+
+    std::shared_ptr<BlockFileSource> BlockStore::adopt (const juce::File& blockFile, int numChannels,
+                                                        double sampleRate, juce::int64 numFrames)
+    {
+        if (! blockFile.existsAsFile() || numChannels <= 0
+            || blockFile.getSize() < numFrames * numChannels * (juce::int64) sizeof (float))
+            return nullptr;
+
+        auto target = blockFile;
+        if (blockFile.getParentDirectory() != folder)
+        {
+            target = createFileName (".f32");
+            if (! blockFile.moveFileTo (target))
+                return nullptr;
+        }
+
+        return std::make_shared<BlockFileSource> (target, numChannels, sampleRate, numFrames);
+    }
+
+    juce::File BlockStore::findRecoverableFolder (const juce::File& parentFolder)
+    {
+        juce::File newest;
+
+        for (const auto& entry : juce::RangedDirectoryIterator (parentFolder, false, "run-*", juce::File::findDirectories))
+        {
+            const auto runFolder = entry.getFile();
+            const auto journal = runFolder.getChildFile (journalFileName);
+            if (! journal.existsAsFile())
+                continue;
+
+            juce::InterProcessLock lock (lockNameFor (runFolder));
+            if (! lock.enter (0))
+                continue; // still in use by a running program
+
+            lock.exit();
+
+            if (newest == juce::File()
+                || journal.getLastModificationTime() > newest.getChildFile (journalFileName).getLastModificationTime())
+                newest = runFolder;
+        }
+
+        return newest;
     }
 
     juce::String BlockStore::lockNameFor (const juce::File& runFolder)
@@ -141,13 +199,16 @@ namespace mxj
         return "mxj-audio-blocks-" + juce::String::toHexString (runFolder.getFullPathName().hashCode64());
     }
 
-    int BlockStore::cleanUpAbandonedFolders (const juce::File& parentFolder)
+    int BlockStore::cleanUpAbandonedFolders (const juce::File& parentFolder, const juce::File& keep)
     {
         int deleted = 0;
 
         for (const auto& entry : juce::RangedDirectoryIterator (parentFolder, false, "run-*", juce::File::findDirectories))
         {
             const auto runFolder = entry.getFile();
+            if (runFolder == keep)
+                continue;
+
             juce::InterProcessLock lock (lockNameFor (runFolder));
 
             // If we can take the lock, the program that made the folder has ended.

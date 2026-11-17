@@ -49,12 +49,12 @@ namespace mxj
         }
 
         /** Returns the request number to wait for with waitForStart(). */
-        int requestStart (juce::int64 position, double ratio)
+        int requestStart (juce::int64 position, double ratio, juce::int64 end)
         {
             int gen;
             {
                 const std::lock_guard<std::mutex> lock (requestLock);
-                request = { Request::start, position, ratio };
+                request = { Request::start, position, ratio, end };
                 gen = ++requestGeneration;
             }
             wake.signal();
@@ -65,7 +65,7 @@ namespace mxj
         {
             {
                 const std::lock_guard<std::mutex> lock (requestLock);
-                request = { Request::halt, 0, 1.0 };
+                request = { Request::halt, 0, 1.0, -1 };
                 ++requestGeneration;
             }
             wake.signal();
@@ -112,7 +112,7 @@ namespace mxj
 
                 if (r.type == Request::start)
                 {
-                    begin (r.position, r.ratio);
+                    begin (r.position, r.ratio, r.end);
                     fill();
                     startedGeneration = gen;
                     started.signal();
@@ -137,10 +137,12 @@ namespace mxj
             enum Type { none, start, halt } type = none;
             juce::int64 position = 0;
             double ratio = 1.0;
+            juce::int64 end = -1; ///< stop here; -1 = end of the sequence
         };
 
-        void begin (juce::int64 position, double ratio)
+        void begin (juce::int64 position, double ratio, juce::int64 end)
         {
+            endPos = end < 0 ? playing.getNumFrames() : juce::jlimit ((juce::int64) 0, playing.getNumFrames(), end);
             owner.fifo.reset(); // safe: the audio thread is halted until we signal `started`
             owner.endOfSequenceWritten = false;
             readPos = juce::jlimit ((juce::int64) 0, playing.getNumFrames(), position);
@@ -161,8 +163,7 @@ namespace mxj
         {
             while (active && ! ended && owner.fifo.getFreeSpace() >= chunkFrames && ! threadShouldExit())
             {
-                const auto length = playing.getNumFrames();
-                const auto remaining = length - readPos;
+                const auto remaining = endPos - readPos;
 
                 if (remaining <= 0)
                 {
@@ -233,7 +234,7 @@ namespace mxj
 
         // Disk thread only.
         AudioSequence playing;
-        juce::int64 readPos = 0;
+        juce::int64 readPos = 0, endPos = 0;
         double speed = 1.0;
         bool resample = false, ended = false, active = false;
         juce::WindowedSincInterpolator interpolators[2];
@@ -256,7 +257,7 @@ namespace mxj
         diskThread->setSequence (std::move (sequence));
     }
 
-    bool PlaybackEngine::play (juce::int64 startFrame)
+    bool PlaybackEngine::play (juce::int64 startFrame, juce::int64 endFrame)
     {
         stop();
 
@@ -273,7 +274,7 @@ namespace mxj
         underruns = 0;
         finishedFlag = false;
 
-        const auto gen = diskThread->requestStart (startFrame, ratio);
+        const auto gen = diskThread->requestStart (startFrame, ratio, endFrame);
         if (! diskThread->waitForStart (gen, 3000))
         {
             diskThread->requestHalt();

@@ -25,6 +25,9 @@ namespace mxj
 
         juce::File getFile() const { return file; }
 
+        /** {"type": "block", "path", "channels", "rate", "frames"}. */
+        juce::var describe() const override;
+
     private:
         juce::File file;
         int channels;
@@ -63,6 +66,13 @@ namespace mxj
 
             juce::int64 getNumFramesWritten() const noexcept { return framesWritten; }
 
+            /** Pushes buffered frames to the disk (so a crash loses little). */
+            void flush() { if (out != nullptr) out->flush(); }
+
+            juce::File getFile() const { return file; }
+            int getNumChannels() const noexcept { return channels; }
+            double getSampleRate() const noexcept { return rate; }
+
         private:
             friend class BlockStore;
             Writer (juce::File, int numChannels, double sampleRate);
@@ -82,9 +92,28 @@ namespace mxj
 
         juce::File getFolder() const { return folder; }
 
-        /** Deletes run folders in `parentFolder` whose program is no longer running.
+        /** A new, unused file name in the run folder (for copies that are not
+            float blocks, e.g. the original of a file that is being saved over).
+            Files there are deleted with the folder. Thread safe. */
+        juce::File createFileName (const juce::String& extension);
+
+        /** Takes over a block file of an earlier run (crash recovery): moves it
+            into this run's folder and returns it as a source, or nullptr if the
+            file is missing or has the wrong size. */
+        std::shared_ptr<BlockFileSource> adopt (const juce::File& blockFile, int numChannels,
+                                                double sampleRate, juce::int64 numFrames);
+
+        /** Name of the crash recovery journal inside a run folder. */
+        static constexpr const char* journalFileName = "recovery.json";
+
+        /** The newest run folder in `parentFolder` whose program is no longer
+            running and which holds a recovery journal, or an empty File. */
+        static juce::File findRecoverableFolder (const juce::File& parentFolder);
+
+        /** Deletes run folders in `parentFolder` whose program is no longer running,
+            except `keep` (a folder whose work may still be recovered).
             Returns the number of folders deleted. */
-        static int cleanUpAbandonedFolders (const juce::File& parentFolder);
+        static int cleanUpAbandonedFolders (const juce::File& parentFolder, const juce::File& keep = {});
 
     private:
         static juce::String lockNameFor (const juce::File& runFolder);

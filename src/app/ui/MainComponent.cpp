@@ -92,7 +92,7 @@ namespace mxj
         if (doc != nullptr)
         {
             startPage = nullptr;
-            editorPage = std::make_unique<EditorPage> (workspace, context.commands, run);
+            editorPage = std::make_unique<EditorPage> (workspace, context.commands, run, context.audio.getRecorder());
             addAndMakeVisible (*editorPage);
         }
         else
@@ -113,6 +113,9 @@ namespace mxj
     {
         showPage();
         commandManager.commandStatusChanged();
+
+        if (onDocumentChanged != nullptr)
+            onDocumentChanged(); // the title shows unsaved changes
 
         if (startPage != nullptr)
             startPage->repaint(); // shows the audio device
@@ -161,9 +164,15 @@ namespace mxj
     {
         juce::PopupMenu menu;
         const auto category = getMenuNames()[menuIndex];
+        const auto separators = getMenuSeparatorsAfter();
+        const auto items = context.commands.getByCategory (category);
 
-        for (const auto* c : context.commands.getByCategory (category))
-            menu.addCommandItem (&commandManager, toJuceId (c->id));
+        for (size_t i = 0; i < items.size(); ++i)
+        {
+            menu.addCommandItem (&commandManager, toJuceId (items[i]->id));
+            if (separators.contains (items[i]->id) && i + 1 < items.size())
+                menu.addSeparator();
+        }
 
         if (menu.getNumItems() == 0)
             menu.addItem (juce::PopupMenu::Item (TRANS ("Coming in a later version")).setEnabled (false));

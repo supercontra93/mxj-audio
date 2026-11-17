@@ -16,7 +16,7 @@ decision record in `docs/adr/` and a new row here.
 | ASIO SDK headers (bundled in JUCE) | as bundled in JUCE 9.0.5 | GPL-3.0-only (chosen option of a dual licence) | Steinberg, via JUCE `JUCE.spdx.json` | ASIO audio driver support on Windows |
 | Third-party code bundled inside the JUCE modules we compile (FLAC, Ogg/Vorbis and Opus decoders used to open files since 0.1, zlib, libpng, jpeglib, HarfBuzz, SheenBidi, ...) | as bundled in JUCE 9.0.5 | BSD-3-Clause, Zlib, MIT, IJG, libpng, Apache-2.0 (see `JUCE.spdx.json`) | https://github.com/juce-framework/JUCE/blob/9.0.5/JUCE.spdx.json | Inside JUCE |
 | IBM Plex Sans, IBM Plex Mono | 2017-2018 release in IBM/plex master | SIL Open Font License 1.1 | https://github.com/IBM/plex | Interface fonts (`resources/fonts/`) |
-| Phosphor Icons (regular) | core main | MIT | https://github.com/phosphor-icons/core | Icons (`resources/icons/`), incl. transport and zoom icons added in 0.1 |
+| Phosphor Icons (regular) | core main | MIT | https://github.com/phosphor-icons/core | Icons (`resources/icons/`), incl. transport and zoom icons added in 0.1 and editing, recording and saving icons added in 0.2 |
 
 ASIO is a trademark and software of Steinberg Media Technologies GmbH.
 

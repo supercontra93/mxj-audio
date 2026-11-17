@@ -10,3 +10,4 @@ a changed decision gets a new record that supersedes the old one.
 | [0003](0003-juce-builtins.md) | Use JUCE's own JSON, logger and translations in phase 0 | Accepted |
 | [0004](0004-command-system.md) | String command ids, bridged to JUCE's command manager | Accepted |
 | [0005](0005-audio-model-and-playback.md) | Audio blocks, WAV read in place, peak cache, playback through a disk thread and lock-free FIFO | Accepted |
+| [0006](0006-editing-recording-recovery.md) | Edits as new sequences, derived sources, safe saving over open files, recorder and crash journal | Accepted |

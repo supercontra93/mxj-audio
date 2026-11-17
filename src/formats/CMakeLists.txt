@@ -1,5 +1,9 @@
 # mxj_formats: reading and writing audio files and metadata.
 add_library(mxj_formats STATIC
+    export/AudioExporter.cpp
+    export/AudioExporter.h
+    metadata/CueMarkers.cpp
+    metadata/CueMarkers.h
     import/AudioFileFormats.cpp
     import/AudioFileFormats.h
     import/AudioImporter.cpp

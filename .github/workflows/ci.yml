@@ -51,7 +51,7 @@ jobs:
             throw "The log does not say 'Smoke test passed'"
           }
 
-      - name: Smoke test with a 10 minute WAV (opens, loads, quits cleanly)
+      - name: Smoke test with a 10 minute WAV (opens, loads, cuts, undoes, exports, quits cleanly)
         shell: pwsh
         run: |
           $exe  = "build/src/app/MXJAudio_artefacts/Release/MXJ AUDIO.exe"
@@ -60,11 +60,14 @@ jobs:
           python tools/make_test_wav.py $wav 600
           $p = Start-Process -FilePath $exe -ArgumentList "--smoke-test", "--data-dir", "`"$data`"", "`"$wav`"" -PassThru
           $null = $p.Handle
-          if (-not $p.WaitForExit(90000)) { $p.Kill(); throw "MXJ AUDIO did not quit within 90 seconds" }
+          if (-not $p.WaitForExit(150000)) { $p.Kill(); throw "MXJ AUDIO did not quit within 150 seconds" }
           Get-Content (Join-Path $data "logs/*.log")
           if ($p.ExitCode -ne 0) { throw "MXJ AUDIO exited with code $($p.ExitCode)" }
           if (-not (Select-String -Path (Join-Path $data "logs/*.log") -Pattern "file loaded, 28800000 frames" -Quiet)) {
             throw "The log does not say the file loaded"
+          }
+          if (-not (Select-String -Path (Join-Path $data "logs/*.log") -Pattern "Smoke test: edit and export OK" -Quiet)) {
+            throw "The log does not say the edit and export worked"
           }
 
       - name: Package (portable folder)
@@ -106,5 +109,6 @@ jobs:
           timeout 60 xvfb-run -a "build/src/app/MXJAudio_artefacts/Release/MXJ AUDIO" --smoke-test --data-dir "$RUNNER_TEMP/mxj-data"
           grep -q "Smoke test passed" "$RUNNER_TEMP"/mxj-data/logs/*.log
           python3 tools/make_test_wav.py "$RUNNER_TEMP/smoke.wav" 600
-          timeout 90 xvfb-run -a "build/src/app/MXJAudio_artefacts/Release/MXJ AUDIO" --smoke-test --data-dir "$RUNNER_TEMP/mxj-data-file" "$RUNNER_TEMP/smoke.wav"
+          timeout 150 xvfb-run -a "build/src/app/MXJAudio_artefacts/Release/MXJ AUDIO" --smoke-test --data-dir "$RUNNER_TEMP/mxj-data-file" "$RUNNER_TEMP/smoke.wav"
           grep -q "file loaded, 28800000 frames" "$RUNNER_TEMP"/mxj-data-file/logs/*.log
+          grep -q "Smoke test: edit and export OK" "$RUNNER_TEMP"/mxj-data-file/logs/*.log

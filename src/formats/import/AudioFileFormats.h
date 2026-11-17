@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #pragma once
 
+#include "core/edit/AudioState.h"
+
 #include <juce_audio_formats/juce_audio_formats.h>
 
 namespace mxj
@@ -14,7 +16,9 @@ namespace mxj
         double sampleRate = 0.0;
         juce::int64 numFrames = 0;
         int bitsPerSample = 0;
+        bool usesFloat = false;      ///< samples stored as floating point (32-bit float WAV)
         bool isUncompressed = false; ///< WAV or AIFF: read directly, no decoding needed
+        MarkerList markers;          ///< cue points of WAV files
 
         double getLengthInSeconds() const { return sampleRate > 0 ? (double) numFrames / sampleRate : 0.0; }
     };

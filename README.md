@@ -6,14 +6,16 @@
 
 ---
 
-**Status: version 0.1 (phase 1, audio core).** Opens WAV, AIFF, FLAC, MP3, Ogg Vorbis and Opus files
-(an hour-long WAV in under a second), shows the waveform with smooth zoom down to single samples,
-plays through WASAPI or ASIO and has audio device settings. Editing arrives in 0.2.
+**Status: version 0.2 (phase 2, editing and recording).** Opens WAV, AIFF, FLAC, MP3, Ogg Vorbis and Opus,
+records from the microphone, edits without touching the original audio (cut, copy, paste, mix paste, trim,
+silence, fades, markers, unlimited undo), saves and exports to WAV, AIFF, FLAC, Ogg Vorbis and Opus,
+and restores your work after a crash. Effects arrive in 0.3.
 See the [roadmap](docs/master-plan.md).
 
-**Durum: Sürüm 0.1 (Faz 1, ses çekirdeği).** WAV, AIFF, FLAC, MP3, Ogg Vorbis ve Opus dosyalarını açar
-(1 saatlik WAV bir saniyeden kısa sürede), dalga formunu tek örneğe kadar yakınlaştırarak gösterir,
-WASAPI veya ASIO ile çalar ve ses aygıtı ayarları vardır. Düzenleme 0.2 sürümünde geliyor.
+**Durum: Sürüm 0.2 (Faz 2, düzenleme ve kayıt).** WAV, AIFF, FLAC, MP3, Ogg Vorbis ve Opus açar, mikrofondan
+kayıt yapar, orijinal sese dokunmadan düzenler (kes, kopyala, yapıştır, karıştırarak yapıştır, kırp, sessizleştir,
+fade, işaretçiler, sınırsız geri alma), WAV, AIFF, FLAC, Ogg Vorbis ve Opus olarak kaydeder ve çökmeden sonra
+çalışmanı geri getirir. Efektler 0.3 sürümünde geliyor.
 
 ## Goals / Hedefler
 

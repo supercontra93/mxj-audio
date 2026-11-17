@@ -2,6 +2,7 @@
 #pragma once
 
 #include "app/Workspace.h"
+#include "app/editor/RecordingPanel.h"
 #include "app/editor/WaveformView.h"
 #include "core/commands/CommandRegistry.h"
 
@@ -9,8 +10,9 @@
 
 namespace mxj
 {
-    /** The page shown while a file is open: transport bar, waveform and scroll bar.
-        Buttons run commands, so they behave exactly like menus and shortcuts. */
+    /** The page shown while a file is open: transport and edit bar, waveform
+        (or the recording panel while recording) and scroll bar. Buttons run
+        commands, so they behave exactly like menus and shortcuts. */
     class EditorPage : public juce::Component,
                        private juce::ChangeListener,
                        private juce::ScrollBar::Listener,
@@ -19,7 +21,7 @@ namespace mxj
     public:
         using RunCommand = std::function<void (const CommandId&)>;
 
-        EditorPage (Workspace& workspace, const CommandRegistry& commands, RunCommand runCommand);
+        EditorPage (Workspace& workspace, const CommandRegistry& commands, RunCommand runCommand, Recorder& recorder);
         ~EditorPage() override;
 
         void paint (juce::Graphics&) override;
@@ -36,12 +38,16 @@ namespace mxj
         void updateFromWorkspace();
 
         juce::String describeFile() const;
+        juce::String describeSelection() const;
 
         Workspace& workspace;
         const CommandRegistry& commands;
         juce::OwnedArray<IconButton> buttons;
         IconButton* playButton = nullptr;
+        IconButton* recordButton = nullptr;
+        juce::Array<int> groupEnds; ///< button indices after which a wider gap follows
         WaveformView waveform;
+        RecordingPanel recordingPanel;
         juce::ScrollBar scrollBar { false };
         juce::Rectangle<int> timeArea, infoArea;
         juce::String timeText;

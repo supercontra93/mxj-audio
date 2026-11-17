@@ -9,6 +9,9 @@ namespace mxj
     /** Menus in display order. Each name is an English source string. */
     juce::StringArray getMenuNames();
 
+    /** Ids of commands after which the menu shows a separator line. */
+    juce::StringArray getMenuSeparatorsAfter();
+
     /** What the UI must provide so that commands can act on it. */
     struct AppActions
     {

@@ -39,7 +39,10 @@ namespace mxj
     void MainWindow::updateTitle()
     {
         const auto* doc = workspace.getDocument();
-        setName (doc != nullptr ? doc->getFile().getFileName() + " - " + version::name : juce::String (version::name));
+        const auto title = doc != nullptr ? (doc->isModified() ? "* " : "") + doc->getDisplayName() + " - " + version::name
+                                          : juce::String (version::name);
+        if (title != getName())
+            setName (title);
     }
 
     void MainWindow::closeButtonPressed()

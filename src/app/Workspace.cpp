@@ -4,6 +4,7 @@
 #include "app/editor/ExportDialog.h"
 #include "app/ui/Dialogs.h"
 #include "dsp/convert/Resample.h"
+#include "dsp/process/Render.h"
 #include "formats/import/FileSampleSource.h"
 #include "services/logging/Log.h"
 #include "services/settings/SettingKeys.h"
@@ -46,6 +47,10 @@ namespace mxj
     //==============================================================================
     Workspace::Workspace (AppContext& ctx) : context (ctx)
     {
+        const auto storedRack = juce::JSON::parse (context.settings.getString (keys::effectRack));
+        rack.setSettings (dsp::chainFromVar (storedRack));
+        rack.onChainChanged = [this] { updateLiveChain(); };
+
         startTimerHz (30);
     }
 
@@ -56,7 +61,9 @@ namespace mxj
         if (recording)
             context.audio.stopRecording();
 
+        rack.onChainChanged = nullptr;
         context.audio.getPlayback().setSequence ({});
+        context.audio.getPlayback().setEffectChain (nullptr);
         context.history.clear();
         document = nullptr;
     }
@@ -998,6 +1005,12 @@ namespace mxj
     void Workspace::timerCallback()
     {
         auto& playback = context.audio.getPlayback();
+        playback.collectRetiredChain();
+
+        // The device changed its sample rate: the live chain must be prepared again.
+        if (liveChainWanted && playback.getDeviceSampleRate() > 0.0
+            && ! juce::approximatelyEqual (playback.getDeviceSampleRate(), playback.getEffectChainSampleRate()))
+            updateLiveChain();
 
         if (playback.takeFinishedFlag() || (wasPlaying && ! playback.isPlaying()))
             stop(); // reached the end, or the device changed
@@ -1028,6 +1041,276 @@ namespace mxj
         const auto now = juce::Time::getMillisecondCounter();
         if (! isBusy() && ((journalDirty && now - lastJournalWrite > 1500) || (recording && now - lastJournalWrite > 5000)))
             writeJournal();
+    }
+
+    //==============================================================================
+    // Effects (phase 3)
+
+    FrameRange Workspace::getEffectRange() const
+    {
+        if (document == nullptr)
+            return {};
+
+        return hasSelection() ? selection : FrameRange (0, document->getLength());
+    }
+
+    void Workspace::processRange (const juce::String& name, FrameRange range,
+                                  std::function<AudioSequence (const AudioSequence&, BlockStore&, BackgroundJob&)> make,
+                                  std::function<void()> afterApplied)
+    {
+        if (! canEdit() || range.isEmpty())
+            return;
+
+        auto input = document->getAudio().getRange (range.getStart(), range.getLength());
+        auto result = std::make_shared<AudioSequence>();
+        auto& store = context.blocks();
+
+        runJob (name, [input, result, &store, make] (BackgroundJob& j)
+        {
+            *result = make (input, store, j);
+
+            if (result->getNumChannels() == 0 && j.error.isEmpty() && j.shouldContinue())
+                j.error = TRANS ("The audio could not be written. Is the disk full?");
+
+            return result->getNumChannels() > 0;
+        },
+        [this, name, range, result, afterApplied] (bool ok)
+        {
+            if (! ok || document == nullptr)
+            {
+                if (jobError.isNotEmpty())
+                    showError (name, jobError);
+                return;
+            }
+
+            applyEdit (name, edits::replaceRange (document->getAudioState(), range, *result));
+
+            if (afterApplied != nullptr)
+                afterApplied();
+        });
+    }
+
+    void Workspace::applyEffect (const dsp::EffectSettings& settings)
+    {
+        const auto* type = dsp::catalogue::find (settings.typeId);
+        if (type == nullptr || ! canEdit())
+            return;
+
+        const auto name = TRANS (type->name);
+        auto control = [] (BackgroundJob& j) { return dsp::WorkControl { [&j] { return j.shouldContinue(); }, &j.progress }; };
+
+        if (type->kind == dsp::EffectType::Kind::generator)
+        {
+            const auto durationIndex = type->indexOf ("duration");
+            const auto seconds = durationIndex >= 0 ? (double) settings.values[(size_t) durationIndex] : 1.0;
+            const auto rate = document->getSampleRate();
+            const auto channels = document->getNumChannels();
+            const auto frames = (juce::int64) std::llround (seconds * rate);
+            auto result = std::make_shared<AudioSequence>();
+            auto& store = context.blocks();
+
+            runJob (name, [settings, channels, rate, frames, result, &store, control] (BackgroundJob& j)
+            {
+                *result = dsp::generate (settings, channels, rate, frames, store, control (j));
+                return result->getNumChannels() > 0;
+            },
+            [this, name, result] (bool ok)
+            {
+                if (ok && document != nullptr)
+                    applyEdit (name, edits::paste (document->getAudioState(), getEditRange(), *result));
+            });
+            return;
+        }
+
+        const auto range = getEffectRange();
+
+        if (type->id == "normalize")
+        {
+            const auto peakDb = settings.values[0];
+            const bool separate = settings.values[1] > 0.5f;
+
+            processRange (name, range, [peakDb, separate, control] (const AudioSequence& input, BlockStore& store, BackgroundJob& j)
+            {
+                const auto stats = dsp::analyse (input, control (j).part (0.0, 0.5));
+                const auto gains = dsp::normalizeGains (stats, peakDb, separate);
+                if (gains.empty())
+                    return input; // silence stays silence
+
+                const bool allSame = std::all_of (gains.begin(), gains.end(), [&] (float g) { return g == gains[0]; });
+                if (allSame)
+                    return derived::gainRamp (input, gains[0], gains[0], GainRampSource::Curve::linear); // no copy needed
+
+                return dsp::applyChannelGains (input, gains, store, control (j).part (0.5, 1.0));
+            });
+            return;
+        }
+
+        if (type->id == "matchLoudness")
+        {
+            const auto target = settings.values[0];
+            const auto peakLimit = settings.values[1];
+            const bool useLimiter = settings.values[2] > 0.5f;
+            auto report = std::make_shared<dsp::LoudnessMatch>();
+
+            processRange (name, range, [=] (const AudioSequence& input, BlockStore& store, BackgroundJob& j)
+            {
+                *report = dsp::matchLoudness (input, target, peakLimit, useLimiter, store, control (j));
+                auto audio = report->audio;
+                report->audio = {}; // keep only the numbers
+                return audio;
+            },
+            [this, report, name]
+            {
+                const auto& a = report->after;
+                auto message = TRANS ("Loudness") + ": " + juce::String (report->before.integratedLufs, 1) + " LUFS -> "
+                             + juce::String (a.integratedLufs, 1) + " LUFS,  " + TRANS ("true peak") + " "
+                             + juce::String (a.truePeakDb, 1) + " dBTP";
+                if (report->limited)
+                    message << "  (" << TRANS ("limiter used") << ")";
+
+                setStatus (message);
+
+                if (report->before.integratedLufs <= dsp::LoudnessMeter::silence + 1.0f)
+                    dialogs::showWarning (name, TRANS ("The selection is too short or too quiet to measure its loudness (at least half a second of sound is needed)."));
+                else if (report->peakLimitReached)
+                    dialogs::showInfo (name, message + "\n\n" + TRANS ("The target was not reached: the peaks would pass the true peak limit. Switch on the limiter option to reach it."));
+            });
+            return;
+        }
+
+        if (type->id == "speed")
+        {
+            const auto percent = (double) settings.values[0];
+            processRange (name, range, [percent, control] (const AudioSequence& input, BlockStore& store, BackgroundJob& j)
+            {
+                return dsp::changeSpeed (input, percent, store, control (j));
+            });
+            return;
+        }
+
+        if (type->create == nullptr)
+            return;
+
+        // A real-time effect: render it. The audio after the range feeds look-ahead effects.
+        auto following = document->getAudio().getRange (range.getEnd(), (juce::int64) document->getSampleRate());
+        processRange (name, range, [settings, following, control] (const AudioSequence& input, BlockStore& store, BackgroundJob& j)
+        {
+            auto chain = dsp::ProcessorChain::create ({ settings });
+            return dsp::render (input, *chain, store, following, control (j));
+        });
+    }
+
+    void Workspace::applyRack()
+    {
+        if (! rack.hasActiveEffects())
+        {
+            setStatus (TRANS ("The effect rack has no switched-on effects."));
+            return;
+        }
+
+        // Applying the rack: listening live to it afterwards would apply it twice.
+        const auto chainSettings = rack.getSettings();
+        const auto range = getEffectRange();
+        auto following = document != nullptr ? document->getAudio().getRange (range.getEnd(), (juce::int64) document->getSampleRate())
+                                             : AudioSequence();
+
+        processRange (TRANS ("Effect Rack"), range, [chainSettings, following] (const AudioSequence& input, BlockStore& store, BackgroundJob& j)
+        {
+            auto chain = dsp::ProcessorChain::create (chainSettings);
+            return dsp::render (input, *chain, store, following, { [&j] { return j.shouldContinue(); }, &j.progress });
+        },
+        [this]
+        {
+            if (rack.isMonitoring())
+            {
+                rack.setMonitoring (false);
+                setStatus (TRANS ("Effect rack applied. Live listening was switched off, so the effects are not heard twice."));
+            }
+        });
+    }
+
+    void Workspace::reverseAudio()
+    {
+        processRange (TRANS ("Reverse"), getEffectRange(), [] (const AudioSequence& input, BlockStore& store, BackgroundJob& j)
+        {
+            return dsp::reverse (input, store, { [&j] { return j.shouldContinue(); }, &j.progress });
+        });
+    }
+
+    void Workspace::invertAudio()
+    {
+        if (canEdit())
+            applyEdit (TRANS ("Invert"), edits::gain (document->getAudioState(), getEffectRange(), -1.0f));
+    }
+
+    void Workspace::analyse (std::function<void (const dsp::AudioStats&)> onDone)
+    {
+        if (! isReady() || isBusy() || isRecording())
+            return;
+
+        const auto range = getEffectRange();
+        auto input = document->getAudio().getRange (range.getStart(), range.getLength());
+        auto stats = std::make_shared<dsp::AudioStats>();
+
+        runJob (TRANS ("Analysing"), [input, stats] (BackgroundJob& j)
+        {
+            *stats = dsp::analyse (input, { [&j] { return j.shouldContinue(); }, &j.progress });
+            return stats->valid;
+        },
+        [stats, onDone] (bool ok)
+        {
+            if (ok && onDone != nullptr)
+                onDone (*stats);
+        });
+    }
+
+    void Workspace::startPreview (const dsp::EffectType& type, dsp::ParameterValuesPtr values)
+    {
+        previewType = &type;
+        previewValues = std::move (values);
+        updateLiveChain();
+
+        if (! isPlaying())
+            play();
+    }
+
+    void Workspace::stopPreview()
+    {
+        if (previewType == nullptr)
+            return;
+
+        previewType = nullptr;
+        previewValues = nullptr;
+        stop();
+        updateLiveChain();
+    }
+
+    void Workspace::updateLiveChain()
+    {
+        auto& playback = context.audio.getPlayback();
+
+        if (previewType != nullptr && previewType->create != nullptr)
+        {
+            auto chain = std::make_unique<dsp::ProcessorChain>();
+            chain->add (previewType->create (previewValues));
+            playback.setEffectChain (std::move (chain));
+            liveChainWanted = true;
+        }
+        else if (rack.isMonitoring() && rack.size() > 0)
+        {
+            playback.setEffectChain (rack.createLiveChain());
+            liveChainWanted = true;
+        }
+        else
+        {
+            playback.setEffectChain (nullptr);
+            liveChainWanted = false;
+        }
+    }
+
+    void Workspace::storeSettings()
+    {
+        context.settings.set (keys::effectRack, juce::JSON::toString (dsp::chainToVar (rack.getSettings()), true));
     }
 
     //==============================================================================

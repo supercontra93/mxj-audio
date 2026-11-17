@@ -19,6 +19,7 @@ namespace mxj::palette
     inline const juce::Colour selection  { juce::Colour (76, 194, 216).withAlpha (0.20f) };
     inline const juce::Colour onAccent   { 0xff1a1d21 }; // text drawn on amber
     inline const juce::Colour record     { 0xffff4d4d };
+    inline const juce::Colour meterGreen { 0xff6fbf4a }; // level meters: safe levels
 
     /** Track colours, in order. */
     inline const juce::Colour tracks[] { juce::Colour (0xfff0a23b), juce::Colour (0xff4cc2d8),

@@ -37,6 +37,20 @@ namespace mxj
         setColour (juce::TextEditor::focusedOutlineColourId, accent);
         setColour (juce::TextEditor::highlightColourId, selection);
         setColour (juce::CaretComponent::caretColourId, accent);
+
+        setColour (juce::Slider::backgroundColourId, line);
+        setColour (juce::Slider::trackColourId, accent);
+        setColour (juce::Slider::thumbColourId, text);
+        setColour (juce::Slider::textBoxTextColourId, text);
+        setColour (juce::Slider::textBoxBackgroundColourId, panelRaised);
+        setColour (juce::Slider::textBoxOutlineColourId, line);
+        setColour (juce::ComboBox::backgroundColourId, panelRaised);
+        setColour (juce::ComboBox::outlineColourId, line);
+        setColour (juce::ComboBox::textColourId, text);
+        setColour (juce::ComboBox::arrowColourId, textDim);
+        setColour (juce::ToggleButton::textColourId, text);
+        setColour (juce::ToggleButton::tickColourId, accent);
+        setColour (juce::ToggleButton::tickDisabledColourId, textDim);
     }
 
     juce::Typeface::Ptr GrafitLookAndFeel::getTypefaceForFont (const juce::Font& font)
@@ -70,23 +84,23 @@ namespace mxj
         }
 
         g.setColour (isMenuOpen ? accent : text);
-        g.setFont (fonts::sans (fonts::baseSize));
+        g.setFont (fonts::sans (fonts::menuSize));
         g.drawFittedText (itemText, 0, 0, width, height - 1, juce::Justification::centred, 1);
     }
 
     juce::Font GrafitLookAndFeel::getMenuBarFont (juce::MenuBarComponent&, int, const juce::String&)
     {
-        return fonts::sans (fonts::baseSize);
+        return fonts::sans (fonts::menuSize);
     }
 
     int GrafitLookAndFeel::getMenuBarItemWidth (juce::MenuBarComponent&, int, const juce::String& itemText)
     {
-        return juce::GlyphArrangement::getStringWidthInt (fonts::sans (fonts::baseSize), itemText) + 20;
+        return juce::GlyphArrangement::getStringWidthInt (fonts::sans (fonts::menuSize), itemText) + fonts::scaled (22);
     }
 
     juce::Font GrafitLookAndFeel::getPopupMenuFont()
     {
-        return fonts::sans (fonts::baseSize);
+        return fonts::sans (fonts::menuSize);
     }
 
     void GrafitLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, int height)
@@ -124,7 +138,7 @@ namespace mxj
                                                               juce::Rectangle<int> parentArea)
     {
         const int w = juce::GlyphArrangement::getStringWidthInt (fonts::sans (12.0f), tipText) + 16;
-        const int h = 24;
+        const int h = fonts::scaled (24);
 
         return juce::Rectangle<int> (screenPos.x > parentArea.getCentreX() ? screenPos.x - (w + 12) : screenPos.x + 24,
                                      screenPos.y > parentArea.getCentreY() ? screenPos.y - (h + 6) : screenPos.y + 6,

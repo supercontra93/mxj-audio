@@ -25,6 +25,13 @@ namespace mxj::dialogs
         }), true); // the window deletes itself
     }
 
+    void showInfo (const juce::String& title, const juce::String& message)
+    {
+        juce::AlertWindow::showAsync (juce::MessageBoxOptions::makeOptionsOk (juce::MessageBoxIconType::InfoIcon,
+                                                                              title, message, TRANS ("OK")),
+                                      nullptr);
+    }
+
     void showWarning (const juce::String& title, const juce::String& message)
     {
         juce::AlertWindow::showAsync (juce::MessageBoxOptions::makeOptionsOk (juce::MessageBoxIconType::WarningIcon,

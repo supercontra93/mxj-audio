@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+#include "dsp/effects/EffectCatalogue.h"
 #include "services/i18n/Localisation.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -73,6 +74,10 @@ TEST_CASE ("Every TRANS string in the code has a Turkish translation", "[i18n]")
                 parts.addTokens (line.fromFirstOccurrenceOf ("{", false, false), ",", "\"");
                 for (int i = 1; i <= 3 && i < parts.size(); ++i)
                 {
+                    // Only string literals; names built from variables are checked elsewhere.
+                    if (! parts[i].trim().startsWithChar ('"'))
+                        continue;
+
                     const auto s = parts[i].trim().unquoted();
                     if (s.isNotEmpty() && turkish.translate (s, "<missing>") == "<missing>")
                         missing.add (s);
@@ -82,6 +87,38 @@ TEST_CASE ("Every TRANS string in the code has a Turkish translation", "[i18n]")
     }
 
     missing.removeDuplicates (false);
+    INFO ("Missing translations:\n" << missing.joinIntoString ("\n"));
+    CHECK (missing.isEmpty());
+}
+
+TEST_CASE ("Every effect name, control and preset has a Turkish translation", "[i18n]")
+{
+    const juce::LocalisedStrings turkish (loadTurkish(), false);
+    juce::StringArray missing;
+    const auto check = [&] (const juce::String& s)
+    {
+        if (s.isNotEmpty() && turkish.translate (s, "<missing>") == "<missing>")
+            missing.addIfNotAlreadyThere (s);
+    };
+
+    for (const auto& type : mxj::dsp::catalogue::all())
+    {
+        check (type.name);
+        check (type.name + "...");
+        check (type.category);
+        check (type.description);
+
+        for (const auto& p : type.parameters)
+        {
+            check (p.name);
+            for (const auto& c : p.choices)
+                check (c);
+        }
+
+        for (const auto& preset : type.factoryPresets)
+            check (preset.name);
+    }
+
     INFO ("Missing translations:\n" << missing.joinIntoString ("\n"));
     CHECK (missing.isEmpty());
 }

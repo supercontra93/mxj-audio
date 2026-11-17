@@ -2,6 +2,8 @@
 #pragma once
 
 #include "core/audio/AudioSequence.h"
+#include "dsp/analysis/LevelMeter.h"
+#include "dsp/effects/EffectCatalogue.h"
 
 #include <juce_audio_devices/juce_audio_devices.h>
 
@@ -21,6 +23,11 @@ namespace mxj
         The audio callback allocates no memory, takes no lock and touches no file
         (CLAUDE.md, rule 4). Mono files play on both speakers; files with more than
         two channels play their first two channels in phase 1.
+
+        Phase 3: what plays runs through an effect chain (live preview and the
+        effect rack) and then through the level meter. A new chain is handed to
+        the audio thread through an atomic pointer; the old one comes back the
+        same way and is deleted on the message thread (never on the audio thread).
     */
     class PlaybackEngine : public juce::AudioIODeviceCallback
     {
@@ -62,6 +69,29 @@ namespace mxj
         bool isTestToneEnabled() const noexcept { return testTone.load(); }
 
         //==============================================================================
+        /** Sets the effects heard while playing (nullptr = none). The chain is
+            prepared here for the device (stereo, device sample rate). Message thread. */
+        void setEffectChain (std::unique_ptr<dsp::ProcessorChain> chain);
+
+        /** Sample rate the current effect chain was prepared for (0 = none). Message thread. */
+        double getEffectChainSampleRate() const noexcept { return chainRate; }
+
+        /** Deletes a chain the audio thread has let go of, and hands over a
+            waiting one. Call regularly from a timer. Message thread. */
+        void collectRetiredChain();
+
+        /** Sample rate of the running device, or 0. */
+        double getDeviceSampleRate() const noexcept { return deviceRunning.load() ? deviceRate.load() : 0.0; }
+
+        /** Levels of what is playing (after the effects). */
+        dsp::LevelMeter& getMeter() noexcept { return meter; }
+
+        /** Copies up to `maxSamples` of the most recent output (mono, left + right)
+            for the spectrum analyser, oldest first. Returns how many were copied.
+            Message thread (one reader). */
+        int readRecentOutput (float* dest, int maxSamples);
+
+        //==============================================================================
         /** Sets the device format without a device. Called by audioDeviceAboutToStart;
             tests call it directly and then drive audioDeviceIOCallbackWithContext. */
         void prepare (double deviceSampleRate, int maximumBlockSize);
@@ -89,6 +119,13 @@ namespace mxj
             callback that is running right now has returned. */
         void haltAudioThread();
 
+        /** Audio thread: takes a new chain if one waits and the retired slot is free. */
+        void adoptPendingChain() noexcept;
+
+        /** Audio thread: plays `numFrames` frames from the FIFO into the work buffer,
+            then effects, meter and spectrum tap. Returns frames taken from the FIFO. */
+        int renderBlock (int numFrames) noexcept;
+
         // Shared with the audio thread (lock free).
         std::atomic<State> state { State::stopped };
         std::atomic<bool> inCallback { false };
@@ -107,6 +144,23 @@ namespace mxj
         std::atomic<bool> endOfSequenceWritten { false };
 
         std::unique_ptr<DiskThread> diskThread;
+
+        // Effects: handed over through atomics (see setEffectChain).
+        std::atomic<dsp::ProcessorChain*> pendingChain { nullptr }, retiredChain { nullptr };
+        dsp::ProcessorChain* activeChain = nullptr;      ///< audio thread only (and while halted)
+        std::unique_ptr<dsp::ProcessorChain> waitingChain; ///< message thread: not handed over yet
+        std::atomic<bool> resetChainRequested { false };
+        double chainRate = 0.0;
+        int deviceBlockSize = 512;
+
+        static constexpr int workFrames = 4096;
+        juce::AudioBuffer<float> work { 2, workFrames };
+        dsp::LevelMeter meter;
+
+        // Spectrum tap: audio thread writes, message thread reads.
+        static constexpr int tapFrames = 1 << 15;
+        juce::AbstractFifo tapFifo { tapFrames };
+        std::vector<float> tapBuffer = std::vector<float> ((size_t) tapFrames);
 
         JUCE_DECLARE_NON_COPYABLE (PlaybackEngine)
     };

@@ -1,7 +1,9 @@
-# mxj_services: settings, logging, paths, translations, updates (phase 8), plugin catalogue (phase 6).
+# mxj_services: settings, logging, paths, presets, translations, updates (phase 8), plugin catalogue (phase 6).
 add_library(mxj_services STATIC
     paths/AppPaths.cpp
     paths/AppPaths.h
+    presets/PresetStore.cpp
+    presets/PresetStore.h
     settings/Settings.cpp
     settings/Settings.h
     settings/SettingKeys.h

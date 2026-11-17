@@ -10,7 +10,10 @@
 #include "app/AppCommands.h"
 #include "app/AppContext.h"
 #include "app/Workspace.h"
+#include "app/effects/EffectDialog.h"
+#include "app/effects/StatsDialog.h"
 #include "app/settings/AudioSettingsPanel.h"
+#include "app/theme/Fonts.h"
 #include "app/theme/GrafitLookAndFeel.h"
 #include "app/ui/AboutPanel.h"
 #include "app/ui/MainComponent.h"
@@ -101,6 +104,8 @@ namespace mxj
                                ? "Settings file was damaged; a copy was kept and defaults are used"
                                : "No settings file yet; using defaults");
 
+            fonts::setTextScale ((float) context->settings.getDouble (keys::textSize));
+
             Localisation::apply (context->settings.getString (keys::language),
                                  translationFor (context->settings.getString (keys::language)));
 
@@ -119,7 +124,10 @@ namespace mxj
                 [this] { systemRequestedQuit(); },
                 [this] { AboutPanel::show (mainWindow.get()); },
                 [this] (const juce::String& code) { setLanguage (code); },
-                [this] { showAudioSettings(); } });
+                [this] { showAudioSettings(); },
+                [this] (const juce::String& effectId) { showEffect (effectId); },
+                [this] { showLoudnessAndLevels(); },
+                [this] (float scale) { setTextScale (scale); } });
 
             mainWindow = std::make_unique<MainWindow> (*context, *workspace, [this] { systemRequestedQuit(); });
 
@@ -142,6 +150,9 @@ namespace mxj
 
             if (context != nullptr)
                 context->settings.set (keys::audioDeviceState, context->audio.getState());
+
+            if (workspace != nullptr)
+                workspace->storeSettings();
 
             if (context != nullptr && ! context->settings.save())
                 Log::error ("Could not save settings to " + context->settings.getFile().getFullPathName());
@@ -185,6 +196,35 @@ namespace mxj
 
                 context->settings.set (keys::audioDeviceState, context->audio.getState());
                 Log::info ("Audio device: " + context->audio.describeDevice());
+            });
+        }
+
+        void showEffect (const juce::String& effectId)
+        {
+            if (const auto* type = dsp::catalogue::find (effectId))
+                EffectDialog::show (*workspace, context->presets, *type, mainWindow.get());
+        }
+
+        void showLoudnessAndLevels()
+        {
+            const auto what = workspace->hasSelection() ? TRANS ("Selection") : TRANS ("Whole file");
+            workspace->analyse ([this, what] (const dsp::AudioStats& stats)
+            {
+                if (mainWindow != nullptr)
+                    StatsDialog::show (stats, what, mainWindow.get());
+            });
+        }
+
+        void setTextScale (float scale)
+        {
+            fonts::setTextScale (scale);
+            context->settings.set (keys::textSize, (double) scale);
+            Log::info ("Text size set to " + juce::String (scale, 2));
+
+            juce::MessageManager::callAsync ([this]
+            {
+                if (mainWindow != nullptr)
+                    mainWindow->refreshTexts();
             });
         }
 
@@ -257,6 +297,69 @@ namespace mxj
                 return;
             }
 
+            smokeTestEffects (length);
+        }
+
+        /** Phase 3 part of the smoke test: a compressor on the first two seconds,
+            then Match Loudness (-16 LUFS) on the first 30 seconds, both in the
+            background as from the dialogs. The length must stay the same, and two
+            undo steps must bring back the original. Then the export follows. */
+        void smokeTestEffects (juce::int64 length)
+        {
+            auto* doc = workspace->getDocument();
+            const auto second = (juce::int64) doc->getSampleRate();
+
+            workspace->setSelection ({ 0, juce::jmin (length, 2 * second) });
+            workspace->applyEffect (dsp::EffectSettings::defaultsFor ("compressor"));
+
+            smokeTestWhenIdle ([this, length, second]
+            {
+                auto* d = workspace->getDocument();
+                const bool compOk = d->getAudio().getNumFrames() == length && d->isModified();
+
+                auto loudness = dsp::EffectSettings::defaultsFor ("matchLoudness");
+                workspace->setSelection ({ 0, juce::jmin (length, 30 * second) });
+                workspace->applyEffect (loudness);
+
+                smokeTestWhenIdle ([this, length, compOk]
+                {
+                    auto* d2 = workspace->getDocument();
+                    const bool loudOk = d2->getAudio().getNumFrames() == length;
+                    context->commands.perform ("edit.undo");
+                    context->commands.perform ("edit.undo");
+                    const bool undoOk = d2->getAudio().getNumFrames() == length && ! d2->isModified();
+
+                    if (! compOk || ! loudOk || ! undoOk)
+                    {
+                        Log::error ("Smoke test failed: compressor " + juce::String (compOk ? "ok" : "wrong")
+                                    + ", loudness " + juce::String (loudOk ? "ok" : "wrong")
+                                    + ", undo " + juce::String (undoOk ? "ok" : "wrong"));
+                        setApplicationReturnValue (1);
+                        quit();
+                        return;
+                    }
+
+                    Log::info ("Smoke test: effects OK");
+                    smokeTestExport (length);
+                });
+            });
+        }
+
+        /** Calls `next` once the background job has finished. */
+        void smokeTestWhenIdle (std::function<void()> next)
+        {
+            if (workspace->isBusy() && juce::Time::getMillisecondCounter() - smokeTestStart < 80000)
+            {
+                juce::Timer::callAfterDelay (100, [this, next] { smokeTestWhenIdle (next); });
+                return;
+            }
+
+            next();
+        }
+
+        void smokeTestExport (juce::int64 length)
+        {
+            workspace->setSelection ({});
             ExportSettings settings;
             settings.file = context->paths.getRoot().getChildFile ("smoke-export.flac");
             settings.format = ExportFormat::flac;

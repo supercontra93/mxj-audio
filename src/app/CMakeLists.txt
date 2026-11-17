@@ -41,6 +41,20 @@ add_library(mxj_app STATIC
     document/BackgroundJob.h
     document/RecoveryJournal.cpp
     document/RecoveryJournal.h
+    effects/EffectDialog.cpp
+    effects/EffectDialog.h
+    effects/EffectRack.cpp
+    effects/EffectRack.h
+    effects/ParameterPanel.cpp
+    effects/ParameterPanel.h
+    effects/RackPanel.cpp
+    effects/RackPanel.h
+    effects/StatsDialog.cpp
+    effects/StatsDialog.h
+    meters/MeterPanel.cpp
+    meters/MeterPanel.h
+    meters/SpectrumView.cpp
+    meters/SpectrumView.h
     editor/EditorPage.cpp
     editor/EditorPage.h
     editor/ExportDialog.cpp

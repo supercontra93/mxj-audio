@@ -4,7 +4,9 @@
 #include "app/AppContext.h"
 #include "app/document/AudioDocument.h"
 #include "app/document/BackgroundJob.h"
+#include "app/effects/EffectRack.h"
 #include "core/edit/EditOperations.h"
+#include "dsp/process/Analysis.h"
 #include "formats/export/AudioExporter.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -135,6 +137,38 @@ namespace mxj
         FrameRange getRecordingRange() const noexcept { return recordRange; }
 
         //==============================================================================
+        // Effects (phase 3)
+
+        /** The range effects work on: the selection, or the whole file without one. */
+        FrameRange getEffectRange() const;
+
+        /** Applies an effect to the effect range in the background and records an
+            undo step. Generators insert their audio at the cursor (replacing the
+            selection). Offline effects (normalize, loudness, speed) measure first. */
+        void applyEffect (const dsp::EffectSettings& settings);
+
+        /** Applies the switched-on effects of the rack to the effect range. */
+        void applyRack();
+
+        void reverseAudio();
+        void invertAudio();
+
+        /** Measures the effect range in the background; `onDone` gets the result. */
+        void analyse (std::function<void (const dsp::AudioStats&)> onDone);
+
+        /** Live preview from an effect dialog: what plays goes through this effect
+            (instead of the rack) until stopPreview(). Starts playing the effect
+            range from its start if nothing plays. */
+        void startPreview (const dsp::EffectType& type, dsp::ParameterValuesPtr values);
+        void stopPreview();
+        bool isPreviewing() const noexcept { return previewType != nullptr; }
+
+        EffectRack& getRack() noexcept { return rack; }
+
+        /** Writes the rack into the settings (called before the settings are saved). */
+        void storeSettings();
+
+        //==============================================================================
         /** Asks whether to restore the work of a run that crashed, found in `runFolder`. */
         void offerRecovery (const juce::File& runFolder);
 
@@ -199,6 +233,16 @@ namespace mxj
         void runJob (const juce::String& title, BackgroundJob::Work work, BackgroundJob::Done done);
         void writeJournal();
 
+        /** Gives the playback engine the chain to hear: the effect being previewed,
+            else the rack while "listen live" is on, else nothing. */
+        void updateLiveChain();
+
+        /** Runs `make` in the background on the audio of `range` and replaces the
+            range by its result as one undo step called `name`. */
+        void processRange (const juce::String& name, FrameRange range,
+                           std::function<AudioSequence (const AudioSequence& input, BlockStore&, BackgroundJob&)> make,
+                           std::function<void()> afterApplied = nullptr);
+
         AppContext& context;
         std::unique_ptr<AudioDocument> document;
         std::unique_ptr<juce::FileChooser> chooser;
@@ -216,6 +260,11 @@ namespace mxj
         bool recording = false;
         FrameRange recordRange;
         int newRecordingCount = 0;
+
+        EffectRack rack;
+        const dsp::EffectType* previewType = nullptr;
+        dsp::ParameterValuesPtr previewValues;
+        bool liveChainWanted = false;
 
         bool journalDirty = false;
         juce::uint32 lastJournalWrite = 0;

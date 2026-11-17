@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "core/edit/EditOperations.h"
 
+#include <cmath>
+
 #include <algorithm>
 
 namespace mxj::edits
@@ -142,6 +144,39 @@ namespace mxj::edits
         range = clampRange (s, range);
         return replaceInPlace (s, range, derived::gainRamp (s.audio.getRange (range.getStart(), range.getLength()),
                                                             gainFactor, gainFactor, GainRampSource::Curve::linear));
+    }
+
+    Result replaceRange (const AudioState& s, FrameRange range, const AudioSequence& processed)
+    {
+        range = clampRange (s, range);
+        Result r { s, range, false };
+        if (range.isEmpty() || ! processed.hasSameFormat (s.audio))
+            return r;
+
+        const auto newLength = processed.getNumFrames();
+        if (! r.state.audio.replace (range.getStart(), range.getLength(), processed))
+            return r;
+
+        if (newLength != range.getLength())
+        {
+            r.state.markers.clear();
+            const auto scale = (double) newLength / (double) range.getLength();
+
+            for (const auto& m : s.markers)
+            {
+                auto pos = m.position;
+                if (pos >= range.getEnd())
+                    pos += newLength - range.getLength();
+                else if (pos > range.getStart())
+                    pos = range.getStart() + (juce::int64) std::llround ((double) (pos - range.getStart()) * scale);
+
+                r.state.markers.push_back ({ pos, m.name });
+            }
+        }
+
+        r.selection = { range.getStart(), range.getStart() + newLength };
+        r.changed = true;
+        return r;
     }
 
     //==============================================================================

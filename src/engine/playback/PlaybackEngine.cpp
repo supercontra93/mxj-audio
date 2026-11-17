@@ -249,6 +249,67 @@ namespace mxj
     {
         haltAudioThread();
         diskThread = nullptr;
+
+        // The device callback has been removed by now (AudioEngine::shutdown).
+        delete pendingChain.exchange (nullptr);
+        delete retiredChain.exchange (nullptr);
+        delete activeChain;
+        activeChain = nullptr;
+    }
+
+    //==============================================================================
+    void PlaybackEngine::setEffectChain (std::unique_ptr<dsp::ProcessorChain> chain)
+    {
+        if (chain == nullptr)
+            chain = std::make_unique<dsp::ProcessorChain>(); // an empty chain plays the audio unchanged
+
+        const auto rate = deviceRate.load() > 0.0 ? deviceRate.load() : 48000.0;
+        chain->prepare (rate, juce::jmax (deviceBlockSize, workFrames), 2);
+        chainRate = chain->isEmpty() ? 0.0 : rate;
+
+        waitingChain = std::move (chain);
+        collectRetiredChain();
+    }
+
+    void PlaybackEngine::collectRetiredChain()
+    {
+        delete retiredChain.exchange (nullptr);
+
+        if (waitingChain == nullptr)
+            return;
+
+        // A chain the audio thread has not taken yet is simply replaced.
+        delete pendingChain.exchange (waitingChain.release());
+    }
+
+    void PlaybackEngine::adoptPendingChain() noexcept
+    {
+        // Only while the retired slot is free, so a retired chain is never overwritten.
+        if (retiredChain.load (std::memory_order_acquire) != nullptr)
+            return;
+
+        if (auto* next = pendingChain.exchange (nullptr, std::memory_order_acq_rel))
+        {
+            if (activeChain != nullptr)
+                retiredChain.store (activeChain, std::memory_order_release);
+
+            activeChain = next;
+        }
+    }
+
+    int PlaybackEngine::readRecentOutput (float* dest, int maxSamples)
+    {
+        const auto n = juce::jmin (maxSamples, tapFifo.getNumReady());
+        const auto skip = tapFifo.getNumReady() - n;
+        if (skip > 0)
+            tapFifo.finishedRead (skip); // keep only the newest
+
+        int start1, size1, start2, size2;
+        tapFifo.prepareToRead (n, start1, size1, start2, size2);
+        if (size1 > 0) std::copy_n (tapBuffer.data() + start1, size1, dest);
+        if (size2 > 0) std::copy_n (tapBuffer.data() + start2, size2, dest + size1);
+        tapFifo.finishedRead (size1 + size2);
+        return size1 + size2;
     }
 
     void PlaybackEngine::setSequence (AudioSequence sequence)
@@ -281,6 +342,8 @@ namespace mxj
             return false;
         }
 
+        resetChainRequested = true;
+        meter.requestReset();
         state = State::playing;
         return true;
     }
@@ -316,12 +379,24 @@ namespace mxj
             std::this_thread::yield();
     }
 
-    void PlaybackEngine::prepare (double sampleRate, int)
+    void PlaybackEngine::prepare (double sampleRate, int maximumBlockSize)
     {
         state = State::stopped; // the format changed: the UI notices and stops
         deviceRate = sampleRate;
         deviceRunning = sampleRate > 0;
         tonePhase = 0.0;
+
+        if (maximumBlockSize > 0)
+            deviceBlockSize = maximumBlockSize;
+
+        // No callback runs now, so the active chain may be prepared here. The
+        // workspace notices the new rate and builds a fresh chain as well.
+        if (sampleRate > 0)
+        {
+            meter.prepare (sampleRate, 2);
+            if (activeChain != nullptr)
+                activeChain->prepare (sampleRate, juce::jmax (deviceBlockSize, workFrames), 2);
+        }
     }
 
     void PlaybackEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
@@ -341,6 +416,7 @@ namespace mxj
                                                            int numSamples, const juce::AudioIODeviceCallbackContext&)
     {
         inCallback = true;
+        adoptPendingChain();
 
         for (int c = 0; c < numOutputs; ++c)
             if (outputs[c] != nullptr)
@@ -360,37 +436,38 @@ namespace mxj
         }
         else if (state.load() == State::playing)
         {
-            const auto n = juce::jmin (numSamples, fifo.getNumReady());
-            int start1, size1, start2, size2;
-            fifo.prepareToRead (n, start1, size1, start2, size2);
+            if (resetChainRequested.exchange (false) && activeChain != nullptr)
+                activeChain->reset();
 
-            auto copyOut = [&] (int fifoStart, int count, int outOffset)
+            int taken = 0;
+
+            for (int done = 0; done < numSamples;)
             {
-                if (count <= 0)
-                    return;
+                const auto n = juce::jmin (workFrames, numSamples - done);
+                taken += renderBlock (n);
 
-                const auto* left = fifoBuffer.getReadPointer (0, fifoStart);
-                const auto* right = fifoBuffer.getReadPointer (1, fifoStart);
+                const auto* left = work.getReadPointer (0);
+                const auto* right = work.getReadPointer (1);
 
                 if (numOutputs == 1 && outputs[0] != nullptr)
                 {
-                    juce::FloatVectorOperations::copyWithMultiply (outputs[0] + outOffset, left, 0.5f, count);
-                    juce::FloatVectorOperations::addWithMultiply (outputs[0] + outOffset, right, 0.5f, count);
-                    return;
+                    juce::FloatVectorOperations::copyWithMultiply (outputs[0] + done, left, 0.5f, n);
+                    juce::FloatVectorOperations::addWithMultiply (outputs[0] + done, right, 0.5f, n);
+                }
+                else
+                {
+                    if (numOutputs > 0 && outputs[0] != nullptr)
+                        juce::FloatVectorOperations::copy (outputs[0] + done, left, n);
+                    if (numOutputs > 1 && outputs[1] != nullptr)
+                        juce::FloatVectorOperations::copy (outputs[1] + done, right, n);
                 }
 
-                if (numOutputs > 0 && outputs[0] != nullptr)
-                    juce::FloatVectorOperations::copy (outputs[0] + outOffset, left, count);
-                if (numOutputs > 1 && outputs[1] != nullptr)
-                    juce::FloatVectorOperations::copy (outputs[1] + outOffset, right, count);
-            };
+                done += n;
+            }
 
-            copyOut (start1, size1, 0);
-            copyOut (start2, size2, size1);
-            fifo.finishedRead (size1 + size2);
-            framesPlayed += size1 + size2;
+            framesPlayed += taken;
 
-            if (n < numSamples)
+            if (taken < numSamples)
             {
                 if (endOfSequenceWritten.load (std::memory_order_acquire) && fifo.getNumReady() == 0)
                 {
@@ -405,5 +482,41 @@ namespace mxj
         }
 
         inCallback = false;
+    }
+
+    int PlaybackEngine::renderBlock (int numFrames) noexcept
+    {
+        work.clear (0, numFrames);
+
+        const auto n = juce::jmin (numFrames, fifo.getNumReady());
+        int start1, size1, start2, size2;
+        fifo.prepareToRead (n, start1, size1, start2, size2);
+
+        for (int c = 0; c < 2; ++c)
+        {
+            if (size1 > 0) work.copyFrom (c, 0, fifoBuffer, c, start1, size1);
+            if (size2 > 0) work.copyFrom (c, size1, fifoBuffer, c, start2, size2);
+        }
+
+        fifo.finishedRead (size1 + size2);
+
+        if (activeChain != nullptr && ! activeChain->isEmpty())
+            activeChain->process (work.getArrayOfWritePointers(), 2, numFrames);
+
+        meter.process (work.getArrayOfReadPointers(), 2, numFrames);
+
+        // Spectrum tap: drop what does not fit; the analyser only needs recent audio.
+        const auto toTap = juce::jmin (numFrames, tapFifo.getFreeSpace());
+        tapFifo.prepareToWrite (toTap, start1, size1, start2, size2);
+        const auto* left = work.getReadPointer (0);
+        const auto* right = work.getReadPointer (1);
+
+        for (int i = 0; i < size1; ++i)
+            tapBuffer[(size_t) (start1 + i)] = (left[i] + right[i]) * 0.5f;
+        for (int i = 0; i < size2; ++i)
+            tapBuffer[(size_t) (start2 + i)] = (left[size1 + i] + right[size1 + i]) * 0.5f;
+
+        tapFifo.finishedWrite (size1 + size2);
+        return n;
     }
 }

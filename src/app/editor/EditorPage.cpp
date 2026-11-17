@@ -3,6 +3,7 @@
 #include "app/theme/Fonts.h"
 #include "app/theme/Icons.h"
 #include "app/theme/Palette.h"
+#include "services/settings/SettingKeys.h"
 
 namespace mxj
 {
@@ -88,8 +89,9 @@ namespace mxj
     };
 
     //==============================================================================
-    EditorPage::EditorPage (Workspace& w, const CommandRegistry& c, RunCommand runCommand, Recorder& recorder)
-        : workspace (w), commands (c), waveform (w, c, runCommand), recordingPanel (recorder)
+    EditorPage::EditorPage (Workspace& w, const CommandRegistry& c, RunCommand runCommand, Recorder& recorder, AppContext& ctx)
+        : workspace (w), commands (c), waveform (w, c, runCommand), recordingPanel (recorder), context (ctx),
+          rackPanel (w, ctx.presets), meterPanel (ctx.audio.getPlayback().getMeter()), spectrumView (ctx.audio.getPlayback())
     {
         struct Spec { const char* command; const char* icon; bool endsGroup; };
         const Spec specs[] = {
@@ -130,6 +132,10 @@ namespace mxj
 
         addAndMakeVisible (waveform);
         addChildComponent (recordingPanel);
+        addChildComponent (rackPanel);
+        addChildComponent (meterPanel);
+        addChildComponent (spectrumView);
+        updatePanels();
 
         scrollBar.setAutoHide (false);
         scrollBar.setColour (juce::ScrollBar::thumbColourId, palette::line.brighter (0.15f));
@@ -142,6 +148,11 @@ namespace mxj
         startTimerHz (30);
     }
 
+    int EditorPage::transportHeight()
+    {
+        return fonts::scaled (44) + 4;
+    }
+
     EditorPage::~EditorPage()
     {
         workspace.removeChangeListener (this);
@@ -150,7 +161,7 @@ namespace mxj
     void EditorPage::resized()
     {
         auto area = getLocalBounds();
-        auto bar = area.removeFromTop (transportHeight).reduced (12, 8);
+        auto bar = area.removeFromTop (transportHeight()).reduced (12, 8);
 
         for (int i = 0; i < buttons.size(); ++i)
         {
@@ -159,9 +170,20 @@ namespace mxj
         }
 
         bar.removeFromLeft (4);
-        timeArea = bar.removeFromLeft (150);
+        timeArea = bar.removeFromLeft (fonts::scaled (150));
         bar.removeFromLeft (16);
         infoArea = bar;
+
+        if (rackPanel.isVisible())
+            rackPanel.setBounds (area.removeFromLeft (RackPanel::preferredWidth()));
+        if (meterPanel.isVisible())
+            meterPanel.setBounds (area.removeFromRight (MeterPanel::preferredWidth()));
+
+        if (spectrumView.isVisible())
+        {
+            spectrumView.setBounds (area.removeFromBottom (SpectrumView::preferredHeight()));
+            area.removeFromBottom (1);
+        }
 
         scrollBar.setBounds (area.removeFromBottom (scrollBarHeight));
         area.removeFromTop (1);
@@ -173,7 +195,7 @@ namespace mxj
     {
         g.fillAll (palette::background);
 
-        auto bar = getLocalBounds().removeFromTop (transportHeight);
+        auto bar = getLocalBounds().removeFromTop (transportHeight());
         g.setColour (palette::panel);
         g.fillRect (bar);
         g.setColour (palette::line);
@@ -250,8 +272,26 @@ namespace mxj
         }
     }
 
+    void EditorPage::updatePanels()
+    {
+        const auto& s = context.settings;
+        const bool rack = s.getBool (keys::showRack);
+        const bool meters = s.getBool (keys::showMeters);
+        const bool spectrum = s.getBool (keys::showSpectrum);
+
+        if (rack != rackPanel.isVisible() || meters != meterPanel.isVisible() || spectrum != spectrumView.isVisible())
+        {
+            rackPanel.setVisible (rack);
+            meterPanel.setVisible (meters);
+            spectrumView.setVisible (spectrum);
+            resized();
+        }
+    }
+
     void EditorPage::updateFromWorkspace()
     {
+        updatePanels();
+
         for (auto* b : buttons)
             b->setEnabled (commands.isEnabled (b->commandId));
 
@@ -276,7 +316,7 @@ namespace mxj
         }
 
         timerCallback();
-        repaint (getLocalBounds().removeFromTop (transportHeight));
+        repaint (getLocalBounds().removeFromTop (transportHeight()));
     }
 
     void EditorPage::scrollBarMoved (juce::ScrollBar*, double newRangeStart)

@@ -6,13 +6,17 @@
 namespace mxj::dsp
 {
     AudioSequence resample (const AudioSequence& input, double newRate, BlockStore& store,
-                            const std::function<bool()>& shouldContinue, std::atomic<double>* progress)
+                            const std::function<bool()>& shouldContinue, std::atomic<double>* progress,
+                            double storedRate)
     {
         const auto channels = input.getNumChannels();
         if (channels <= 0 || newRate <= 0 || input.getSampleRate() <= 0)
             return {};
 
-        if (juce::approximatelyEqual (input.getSampleRate(), newRate))
+        if (storedRate <= 0.0)
+            storedRate = newRate;
+
+        if (juce::approximatelyEqual (input.getSampleRate(), newRate) && juce::approximatelyEqual (storedRate, newRate))
             return input;
 
         const auto ratio = input.getSampleRate() / newRate; // input frames per output frame
@@ -26,7 +30,7 @@ namespace mxj::dsp
         juce::AudioBuffer<float> in (channels, (int) std::ceil (chunk * ratio) + 16);
         juce::AudioBuffer<float> out (channels, chunk);
 
-        auto writer = store.createWriter (channels, newRate);
+        auto writer = store.createWriter (channels, storedRate);
         auto peaks = std::make_shared<PeakCache> (channels, outputFrames);
 
         juce::int64 readPos = 0, produced = 0;

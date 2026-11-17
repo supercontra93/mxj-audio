@@ -19,4 +19,9 @@ namespace mxj::keys
     inline constexpr const char* exportFormat        = "export.format";           // "wav", "aiff", "flac", "ogg", "opus"
     inline constexpr const char* exportBits          = "export.bitsPerSample";    // 16, 24, 32 (32 = float WAV)
     inline constexpr const char* exportQuality       = "export.quality";          // quality option index, -1 = default
+    inline constexpr const char* textSize            = "ui.textSize";             // text scale: 1.0 = phase 0-2 size, default 1.15
+    inline constexpr const char* showMeters          = "ui.showMeters";           // level meter panel on the right
+    inline constexpr const char* showSpectrum        = "ui.showSpectrum";         // spectrum analyser under the waveform
+    inline constexpr const char* showRack            = "ui.showRack";             // effect rack panel on the left
+    inline constexpr const char* effectRack          = "effects.rack";            // JSON of the rack (dsp::chainToVar)
 }

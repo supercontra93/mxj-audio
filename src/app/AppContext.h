@@ -6,6 +6,7 @@
 #include "core/history/History.h"
 #include "engine/devices/AudioEngine.h"
 #include "services/paths/AppPaths.h"
+#include "services/presets/PresetStore.h"
 #include "services/settings/Settings.h"
 
 namespace mxj
@@ -15,7 +16,7 @@ namespace mxj
     struct AppContext
     {
         explicit AppContext (AppPaths p)
-            : paths (std::move (p)), settings (paths.getSettingsFile()) {}
+            : paths (std::move (p)), settings (paths.getSettingsFile()), presets (paths.getPresetsFolder()) {}
 
         /** Temporary audio of this run. Created on first use; folders left
             behind by an earlier crash are removed first, except one whose work
@@ -49,6 +50,7 @@ namespace mxj
     public:
         AppPaths paths;
         Settings settings;
+        PresetStore presets;
         CommandRegistry commands;
         History history;
         AudioEngine audio;

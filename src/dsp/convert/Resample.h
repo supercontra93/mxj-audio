@@ -15,8 +15,13 @@ namespace mxj::dsp
         Used when a recording or pasted audio does not have the sample rate of
         the file it goes into. Blocks; run it on a background thread. Returns an
         empty sequence (with `numChannels` 0) if it was cancelled or failed.
+
+        `storedSampleRate` (if > 0) is the sample rate the result is labelled
+        with instead of `newSampleRate`: labelling it with the original rate
+        changes the speed (see changeSpeed()).
     */
     AudioSequence resample (const AudioSequence& input, double newSampleRate, BlockStore& store,
                             const std::function<bool()>& shouldContinue = nullptr,
-                            std::atomic<double>* progress = nullptr);
+                            std::atomic<double>* progress = nullptr,
+                            double storedSampleRate = 0.0);
 }

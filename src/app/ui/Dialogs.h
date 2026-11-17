@@ -9,6 +9,9 @@ namespace mxj::dialogs
     void askForText (const juce::String& title, const juce::String& message, const juce::String& initialText,
                      std::function<void (const juce::String&)> onOk);
 
+    /** Shows information with an OK button. */
+    void showInfo (const juce::String& title, const juce::String& message);
+
     /** Shows a warning with an OK button. */
     void showWarning (const juce::String& title, const juce::String& message);
 

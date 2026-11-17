@@ -42,7 +42,7 @@ namespace mxj
         sourceLink.setFont (fonts::sans (13.0f), false, juce::Justification::centredLeft);
         addAndMakeVisible (sourceLink);
 
-        setSize (520, 380);
+        setSize (fonts::scaled (520), fonts::scaled (380));
     }
 
     void AboutPanel::paint (juce::Graphics& g)

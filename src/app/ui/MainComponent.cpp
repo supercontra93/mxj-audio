@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "app/ui/MainComponent.h"
+#include "app/theme/Fonts.h"
 #include "app/theme/Palette.h"
 
 namespace mxj
 {
     namespace
     {
-        constexpr int menuBarHeight = 26;
-        constexpr int statusBarHeight = 24;
+        int menuBarHeight()   { return fonts::scaled (28); }
+        int statusBarHeight() { return fonts::scaled (24); }
     }
 
     MainComponent::MainComponent (AppContext& ctx, Workspace& w) : context (ctx), workspace (w)
@@ -68,8 +69,8 @@ namespace mxj
     void MainComponent::resized()
     {
         auto area = getLocalBounds();
-        menuBar.setBounds (area.removeFromTop (menuBarHeight));
-        statusBar.setBounds (area.removeFromBottom (statusBarHeight));
+        menuBar.setBounds (area.removeFromTop (menuBarHeight()));
+        statusBar.setBounds (area.removeFromBottom (statusBarHeight()));
 
         if (startPage != nullptr)
             startPage->setBounds (area);
@@ -92,7 +93,7 @@ namespace mxj
         if (doc != nullptr)
         {
             startPage = nullptr;
-            editorPage = std::make_unique<EditorPage> (workspace, context.commands, run, context.audio.getRecorder());
+            editorPage = std::make_unique<EditorPage> (workspace, context.commands, run, context.audio.getRecorder(), context);
             addAndMakeVisible (*editorPage);
         }
         else
@@ -146,9 +147,9 @@ namespace mxj
             return;
 
         g.setColour (palette::accent.withAlpha (0.12f));
-        g.fillRect (getLocalBounds().withTrimmedTop (menuBarHeight));
+        g.fillRect (getLocalBounds().withTrimmedTop (menuBarHeight()));
         g.setColour (palette::accent);
-        g.drawRect (getLocalBounds().withTrimmedTop (menuBarHeight), 2);
+        g.drawRect (getLocalBounds().withTrimmedTop (menuBarHeight()), 2);
     }
 
     juce::StringArray MainComponent::getMenuBarNames()
@@ -167,9 +168,31 @@ namespace mxj
         const auto separators = getMenuSeparatorsAfter();
         const auto items = context.commands.getByCategory (category);
 
+        // Commands with a group go into a submenu, placed where the group first appears.
+        juce::StringArray groupsDone;
+
         for (size_t i = 0; i < items.size(); ++i)
         {
-            menu.addCommandItem (&commandManager, toJuceId (items[i]->id));
+            const auto& group = items[i]->group;
+
+            if (group.isNotEmpty())
+            {
+                if (groupsDone.contains (group))
+                    continue;
+
+                groupsDone.add (group);
+                juce::PopupMenu sub;
+                for (const auto* item : items)
+                    if (item->group == group)
+                        sub.addCommandItem (&commandManager, toJuceId (item->id));
+
+                menu.addSubMenu (TRANS (group), sub);
+            }
+            else
+            {
+                menu.addCommandItem (&commandManager, toJuceId (items[i]->id));
+            }
+
             if (separators.contains (items[i]->id) && i + 1 < items.size())
                 menu.addSeparator();
         }

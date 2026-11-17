@@ -2,7 +2,10 @@
 #include "app/AppCommands.h"
 #include "services/i18n/Localisation.h"
 #include "services/logging/Log.h"
+#include "services/settings/SettingKeys.h"
 #include "services/updates/UpdatePolicy.h"
+#include "app/theme/Fonts.h"
+#include "dsp/effects/EffectCatalogue.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -17,8 +20,9 @@ namespace mxj
     {
         return { "file.close", "file.exportSelection",
                  "edit.redo", "edit.delete", "edit.selectNone", "edit.fadeOut", "markers.previous",
-                 "view.zoomSelection",
-                 "transport.toEnd" };
+                 "view.zoomSelection", "view.textSize.small",
+                 "transport.toEnd",
+                 "effects.tone", "effects.applyRack" };
     }
 
     void registerAppCommands (AppContext& ctx, Workspace& w, AppActions actions)
@@ -80,6 +84,17 @@ namespace mxj
                  nullptr, [setLanguage = actions.setLanguage] { setLanguage ("en"); },
                  [] { return Localisation::getCurrentLanguage() == "en"; } });
 
+        // Text size (phase 3: Baybars found the text too small)
+        const auto textSize = [setTextScale = actions.setTextScale] (float scale)
+        {
+            return [setTextScale, scale] { setTextScale (scale); };
+        };
+        const auto textSizeIs = [] (float scale) { return [scale] { return juce::approximatelyEqual (fonts::getTextScale(), scale); }; };
+        c.add ({ "view.textSize.small",  "Small Text",   "View", "Show the interface text at its smallest size", {}, nullptr, textSize (fonts::textScales[0]), textSizeIs (fonts::textScales[0]), "Text Size" });
+        c.add ({ "view.textSize.normal", "Normal Text",  "View", "Show the interface text at its normal size",   {}, nullptr, textSize (fonts::textScales[1]), textSizeIs (fonts::textScales[1]), "Text Size" });
+        c.add ({ "view.textSize.large",  "Large Text",   "View", "Show the interface text larger",               {}, nullptr, textSize (fonts::textScales[2]), textSizeIs (fonts::textScales[2]), "Text Size" });
+        c.add ({ "view.textSize.larger", "Largest Text", "View", "Show the interface text at its largest size",  {}, nullptr, textSize (fonts::textScales[3]), textSizeIs (fonts::textScales[3]), "Text Size" });
+
         // Transport
         c.add ({ "transport.playStop", "Play / Stop",  "Transport", "Play the selection, or from the cursor; stop", "spacebar",
                  [&w] { return (w.isReady() && ! w.isBusy()) || w.isRecording(); },
@@ -89,6 +104,40 @@ namespace mxj
                  [&w] { return w.isRecording(); } });
         c.add ({ "transport.toStart",  "Go to Start",  "Transport", "Move the cursor to the start of the file", "home",   hasFile, [&w] { w.goToStart(); } });
         c.add ({ "transport.toEnd",    "Go to End",    "Transport", "Move the cursor to the end of the file",   "end",    hasFile, [&w] { w.goToEnd(); } });
+
+        // Effects (phase 3): one command per effect, grouped into submenus.
+        for (const auto& type : dsp::catalogue::all())
+        {
+            const auto id = "effects." + type.id;
+            c.add ({ id, type.name + "...", "Effects", type.description, {}, editable,
+                     [showEffect = actions.showEffect, typeId = type.id] { showEffect (typeId); }, nullptr, type.category });
+
+            if (type.id == "amplify")
+                c.add ({ "effects.invert", "Invert", "Effects", "Turn the waveform upside down (polarity)", {}, editable,
+                         [&w] { w.invertAudio(); }, nullptr, type.category });
+            if (type.id == "speed")
+                c.add ({ "effects.reverse", "Reverse", "Effects", "Play the selection backwards", {}, editable,
+                         [&w] { w.reverseAudio(); }, nullptr, type.category });
+        }
+
+        c.add ({ "effects.applyRack", "Apply Effect Rack", "Effects", "Apply the effects of the rack to the selection, or to the whole file", {},
+                 [&w] { return w.canEdit() && w.getRack().hasActiveEffects(); }, [&w] { w.applyRack(); } });
+        c.add ({ "analysis.loudness", "Loudness and Levels...", "Effects", "Measure loudness (LUFS), peaks and levels of the selection or the file", {},
+                 [&w] { return w.canEdit(); }, actions.showLoudnessAndLevels });
+
+        // Window: panels of the editor
+        const auto togglePanel = [&ctx, &w] (const char* key)
+        {
+            return [&ctx, &w, key]
+            {
+                ctx.settings.set (key, ! ctx.settings.getBool (key));
+                w.sendChangeMessage(); // the editor shows or hides the panel
+            };
+        };
+        const auto panelShown = [&ctx] (const char* key) { return [&ctx, key] { return ctx.settings.getBool (key); }; };
+        c.add ({ "window.effectRack", "Effect Rack",       "Window", "Show or hide the effect rack",       "command + R", nullptr, togglePanel (keys::showRack),     panelShown (keys::showRack) });
+        c.add ({ "window.meters",     "Level Meters",      "Window", "Show or hide the level meters",      {},            nullptr, togglePanel (keys::showMeters),   panelShown (keys::showMeters) });
+        c.add ({ "window.spectrum",   "Spectrum Analyzer", "Window", "Show or hide the spectrum analyzer", {},            nullptr, togglePanel (keys::showSpectrum), panelShown (keys::showSpectrum) });
 
         // Help
         c.add ({ "help.checkUpdates", "Check for Updates...", "Help", "Look for a newer version of MXJ AUDIO", {},

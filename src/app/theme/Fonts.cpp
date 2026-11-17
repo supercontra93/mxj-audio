@@ -31,7 +31,16 @@ namespace mxj::fonts
         return t;
     }
 
-    juce::Font sans (float height)     { return juce::Font (juce::FontOptions (sansRegular()).withHeight (height)); }
-    juce::Font sansBold (float height) { return juce::Font (juce::FontOptions (sansSemiBold()).withHeight (height)); }
-    juce::Font mono (float height)     { return juce::Font (juce::FontOptions (monoRegular()).withHeight (height)); }
+    namespace
+    {
+        float textScale = defaultTextScale;
+    }
+
+    void setTextScale (float scale) { textScale = juce::jlimit (0.8f, 2.0f, scale); }
+    float getTextScale()            { return textScale; }
+    int scaled (int pixels)         { return juce::roundToInt ((float) pixels * textScale); }
+
+    juce::Font sans (float height)     { return juce::Font (juce::FontOptions (sansRegular()).withHeight (height * textScale)); }
+    juce::Font sansBold (float height) { return juce::Font (juce::FontOptions (sansSemiBold()).withHeight (height * textScale)); }
+    juce::Font mono (float height)     { return juce::Font (juce::FontOptions (monoRegular()).withHeight (height * textScale)); }
 }

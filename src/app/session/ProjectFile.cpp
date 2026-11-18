@@ -7,6 +7,8 @@
 #include "formats/import/AudioImporter.h"
 #include "services/logging/Log.h"
 
+#include <algorithm>
+
 namespace mxj::projectFile
 {
     namespace
@@ -229,11 +231,17 @@ namespace mxj::projectFile
                     || importer->getSequence().getBlocks().empty())
                     return silence (juce::File (d["path"].toString()).getFullPathName());
 
+                // WAV and AIFF are read in place as one source; a long file is split into
+                // several blocks of that same source (AudioSequence::fromSource).
                 const auto& seq = importer->getSequence();
-                if (seq.getBlocks().size() == 1 && seq.getBlocks().front().sourceStart == 0)
-                    return seq.getBlocks().front().source;
+                const auto& blocks = seq.getBlocks();
+                const auto whole = blocks.front().source;
+                const bool oneSource = blocks.front().sourceStart == 0 && whole->getNumFrames() == seq.getNumFrames()
+                                    && std::all_of (blocks.begin(), blocks.end(), [&whole] (const auto& b) { return b.source == whole; });
+                if (oneSource)
+                    return whole;
 
-                // Should not happen for WAV and AIFF (read in place as one source); keep it working anyway.
+                // Should not happen for WAV and AIFF; keep the project opening anyway.
                 missingFiles.addIfNotAlreadyThere (path.getFullPathName());
                 return std::make_shared<SilenceSource> (seq.getNumChannels(), seq.getSampleRate(), seq.getNumFrames());
             }

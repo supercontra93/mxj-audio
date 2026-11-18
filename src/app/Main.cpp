@@ -21,6 +21,7 @@
 #include "app/ui/MainComponent.h"
 #include "app/ui/MainWindow.h"
 #include "core/Version.h"
+#include "core/audio/DerivedSources.h"
 #include "services/i18n/Localisation.h"
 #include "services/logging/Log.h"
 #include "services/settings/SettingKeys.h"
@@ -335,32 +336,37 @@ namespace mxj
             if (! session->isActive() || session->getSession().getNumAudioTracks() != 4)
                 return smokeTestFail ("New Multitrack Session");
 
-            // Three seconds of tone at 44.1 kHz (converted to 48 kHz on import).
-            const auto tone = context->paths.getRoot().getChildFile ("smoke-tone.wav");
+            const auto writeTone = [] (const juce::File& file, double rate, int seconds)
             {
-                juce::AudioBuffer<float> audio (2, 3 * 44100);
+                juce::AudioBuffer<float> audio (2, seconds * (int) rate);
                 for (int c = 0; c < 2; ++c)
                     for (int i = 0; i < audio.getNumSamples(); ++i)
-                        audio.setSample (c, i, 0.25f * (float) std::sin (juce::MathConstants<double>::twoPi * 440.0 * i / 44100.0));
+                        audio.setSample (c, i, 0.25f * (float) std::sin (juce::MathConstants<double>::twoPi * 440.0 * i / rate));
 
-                tone.deleteFile();
+                file.deleteFile();
                 juce::WavAudioFormat wav;
-                std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (tone);
+                std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (file);
                 auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}
-                                                               .withSampleRate (44100.0)
+                                                               .withSampleRate (rate)
                                                                .withNumChannels (2)
                                                                .withBitsPerSample (16));
-                if (writer == nullptr || ! writer->writeFromAudioSampleBuffer (audio, 0, audio.getNumSamples()))
-                    return smokeTestFail ("could not write the test tone");
-            }
+                return writer != nullptr && writer->writeFromAudioSampleBuffer (audio, 0, audio.getNumSamples());
+            };
+
+            // Three seconds at 44.1 kHz (converted to 48 kHz on import, so copied into the
+            // project), and 25 seconds at 48 kHz (kept in place; longer than one block).
+            const auto tone = context->paths.getRoot().getChildFile ("smoke-tone.wav");
+            const auto longTone = context->paths.getRoot().getChildFile ("smoke-long.wav");
+            if (! writeTone (tone, 44100.0, 3) || ! writeTone (longTone, 48000.0, 25))
+                return smokeTestFail ("could not write the test tones");
 
             const auto first = session->getSession().tracks[0].id;
             const auto second = session->getSession().tracks[1].id;
             session->importFiles ({ tone }, first, 0);
 
-            smokeTestWhenSessionIdle ([this, tone, second]
+            smokeTestWhenSessionIdle ([this, longTone, second]
             {
-                session->importFiles ({ tone }, second, 48000);
+                session->importFiles ({ longTone }, second, 48000);
 
                 smokeTestWhenSessionIdle ([this, second]
                 {
@@ -373,8 +379,8 @@ namespace mxj
                     for (const auto& t : s.tracks)
                         clips += (int) t.clips.size();
 
-                    // 3 s at 48 kHz, the second clip starts after 1 s: 4 s in all.
-                    const auto expected = (juce::int64) 4 * 48000;
+                    // The second clip starts after 1 s and lasts 25 s: 26 s in all.
+                    const auto expected = (juce::int64) 26 * 48000;
                     if (clips != 2 || s.tracks.size() != 5 || std::abs (s.getLength() - expected) > 2)
                         return smokeTestFail ("import (" + juce::String (clips) + " clips, " + juce::String (s.getLength()) + " frames)");
 
@@ -415,6 +421,13 @@ namespace mxj
 
                                 if (opened.tracks.size() != 5 || openedClips != 2 || opened.tracks[1].outputId != opened.tracks[4].id)
                                     return smokeTestFail ("the opened project is wrong");
+
+                                // No clip may have come back as silence (a file reported missing).
+                                for (const auto& t : opened.tracks)
+                                    for (const auto& clip : t.clips)
+                                        for (const auto& block : clip.audio.getBlocks())
+                                            if (dynamic_cast<const SilenceSource*> (block.source.get()) != nullptr)
+                                                return smokeTestFail ("audio of clip " + clip.name + " is missing after opening");
 
                                 Log::info ("Smoke test: multitrack OK");
                                 Log::info ("Smoke test passed");

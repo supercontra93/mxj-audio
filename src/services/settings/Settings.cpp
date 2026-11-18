@@ -30,6 +30,11 @@ namespace mxj
             d.set (keys::exportFormat,       "wav");
             d.set (keys::exportBits,         24);
             d.set (keys::exportQuality,      -1);
+            d.set (keys::textSize,           1.15);
+            d.set (keys::showMeters,         true);
+            d.set (keys::showSpectrum,       false);
+            d.set (keys::showRack,           false);
+            d.set (keys::effectRack,         juce::String());
             return d;
         }();
 

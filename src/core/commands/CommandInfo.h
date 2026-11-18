@@ -33,5 +33,8 @@ namespace mxj
 
         /** For on/off commands: returns true while the option is on (shown with a tick). */
         std::function<bool()> isTicked;
+
+        /** Submenu inside the category's menu, English (e.g. "Filter and EQ"); empty = top level. */
+        juce::String group;
     };
 }

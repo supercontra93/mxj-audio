@@ -8,8 +8,8 @@ namespace mxj
 {
     namespace
     {
-        constexpr int rowHeight = 28;
-        constexpr int labelWidth = 150;
+        int rowHeight()  { return fonts::scaled (28); }
+        int labelWidth() { return fonts::scaled (150); }
         constexpr int padding = 20;
 
         const char* const labels[] { "Driver type", "Output device", "Sample rate", "Buffer size",
@@ -94,7 +94,7 @@ namespace mxj
 
         engine.getDeviceManager().addChangeListener (this);
         refresh();
-        setSize (520, 430);
+        setSize (fonts::scaled (520), fonts::scaled (430));
     }
 
     AudioSettingsPanel::~AudioSettingsPanel()
@@ -226,14 +226,14 @@ namespace mxj
 
         for (auto* box : { &typeBox, &deviceBox, &rateBox, &bufferBox, &inputBox, &inputChannelBox })
         {
-            auto row = area.removeFromTop (rowHeight);
-            row.removeFromLeft (labelWidth);
+            auto row = area.removeFromTop (rowHeight());
+            row.removeFromLeft (labelWidth());
             box->setBounds (row);
             area.removeFromTop (box == &bufferBox ? 26 : 10);
         }
 
         area.removeFromTop (4);
-        auto buttons = area.removeFromTop (rowHeight);
+        auto buttons = area.removeFromTop (rowHeight());
         testToneButton.setBounds (buttons.removeFromLeft (160));
         buttons.removeFromLeft (10);
         controlPanelButton.setBounds (buttons.removeFromLeft (200));
@@ -251,11 +251,11 @@ namespace mxj
         for (const auto* label : labels)
         {
             g.setColour (palette::textDim);
-            g.drawText (TRANS (label), area.removeFromTop (rowHeight).removeFromLeft (labelWidth), juce::Justification::centredLeft);
+            g.drawText (TRANS (label), area.removeFromTop (rowHeight()).removeFromLeft (labelWidth()), juce::Justification::centredLeft);
             area.removeFromTop (row++ == 3 ? 26 : 10);
         }
 
-        area.removeFromTop (4 + rowHeight + 16);
+        area.removeFromTop (4 + rowHeight() + 16);
         g.setColour (palette::text);
         g.drawText (status, area.removeFromTop (20), juce::Justification::centredLeft);
 

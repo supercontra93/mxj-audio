@@ -52,6 +52,12 @@ namespace mxj
         /** Multiplies the range by a constant gain (used by tests and later effects). */
         Result gain (const AudioState&, FrameRange range, float gainFactor);
 
+        /** Replaces the range by processed audio (an applied effect). The new audio
+            may have another length (speed change): markers inside the range then
+            move in proportion, markers after it move with the audio. It must have
+            the state's channel count and sample rate. The result selects the new audio. */
+        Result replaceRange (const AudioState&, FrameRange range, const AudioSequence& processed);
+
         //==============================================================================
         /** Adds a marker (kept sorted). Returns the index of the new marker. */
         size_t addMarker (MarkerList&, Marker);

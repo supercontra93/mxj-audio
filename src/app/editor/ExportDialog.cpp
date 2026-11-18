@@ -10,7 +10,9 @@ namespace mxj
     {
         constexpr ExportFormat formats[] { ExportFormat::wav, ExportFormat::flac, ExportFormat::ogg,
                                            ExportFormat::opus, ExportFormat::aiff };
-        constexpr int padding = 20, rowHeight = 28, labelWidth = 130;
+        constexpr int padding = 20;
+        int rowHeight()  { return fonts::scaled (28); }
+        int labelWidth() { return fonts::scaled (130); }
     }
 
     void ExportDialog::show (Settings& settings, const juce::String& title, const juce::File& suggestedFile,
@@ -53,7 +55,7 @@ namespace mxj
         addAndMakeVisible (cancelButton);
 
         formatChanged();
-        setSize (460, 220);
+        setSize (fonts::scaled (460), fonts::scaled (220));
     }
 
     ExportFormat ExportDialog::getFormat() const
@@ -168,13 +170,13 @@ namespace mxj
 
         for (auto* box : { &formatBox, &detailBox })
         {
-            auto row = area.removeFromTop (rowHeight);
-            row.removeFromLeft (labelWidth);
+            auto row = area.removeFromTop (rowHeight());
+            row.removeFromLeft (labelWidth());
             box->setBounds (row);
             area.removeFromTop (10);
         }
 
-        auto buttons = area.removeFromBottom (rowHeight);
+        auto buttons = area.removeFromBottom (rowHeight());
         cancelButton.setBounds (buttons.removeFromRight (100));
         buttons.removeFromRight (10);
         saveButton.setBounds (buttons.removeFromRight (120));
@@ -187,9 +189,9 @@ namespace mxj
         area.removeFromTop (6);
         g.setFont (fonts::sans (13.0f));
         g.setColour (palette::textDim);
-        g.drawText (TRANS ("Format"), area.removeFromTop (rowHeight).removeFromLeft (labelWidth), juce::Justification::centredLeft);
+        g.drawText (TRANS ("Format"), area.removeFromTop (rowHeight()).removeFromLeft (labelWidth()), juce::Justification::centredLeft);
         area.removeFromTop (10);
-        g.drawText (detailLabel, area.removeFromTop (rowHeight).removeFromLeft (labelWidth), juce::Justification::centredLeft);
+        g.drawText (detailLabel, area.removeFromTop (rowHeight()).removeFromLeft (labelWidth()), juce::Justification::centredLeft);
         area.removeFromTop (12);
 
         g.setColour (saveButton.isEnabled() ? palette::textDim : palette::record);

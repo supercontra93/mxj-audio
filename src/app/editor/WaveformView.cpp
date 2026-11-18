@@ -72,6 +72,11 @@ namespace mxj
     };
 
     //==============================================================================
+    int WaveformView::rulerHeight()
+    {
+        return fonts::scaled (24);
+    }
+
     WaveformView::WaveformView (Workspace& w, const CommandRegistry& c, RunCommand r)
         : workspace (w), commands (c), run (std::move (r)), playhead (std::make_unique<Playhead>())
     {
@@ -133,7 +138,7 @@ namespace mxj
 
     juce::Rectangle<int> WaveformView::getLanesArea() const
     {
-        return getLocalBounds().withTrimmedTop (rulerHeight);
+        return getLocalBounds().withTrimmedTop (rulerHeight());
     }
 
     //==============================================================================
@@ -147,7 +152,7 @@ namespace mxj
         const int clipLeft = clip.getX();
         const int clipRight = clip.getRight();
 
-        paintRuler (g, getLocalBounds().removeFromTop (rulerHeight), clipLeft, clipRight);
+        paintRuler (g, getLocalBounds().removeFromTop (rulerHeight()), clipLeft, clipRight);
 
         if (doc == nullptr)
             return;
@@ -396,14 +401,14 @@ namespace mxj
 
             // Dashed line through the lanes.
             g.setColour (colour.withAlpha (0.55f));
-            for (float y = (float) rulerHeight; y < (float) getHeight(); y += 6.0f)
+            for (float y = (float) rulerHeight(); y < (float) getHeight(); y += 6.0f)
                 g.fillRect (juce::Rectangle<float> (x, y, 1.0f, 3.0f));
 
             // Flag with the name in the ruler.
-            const auto flag = juce::Rectangle<float> (x, 2.0f, labelWidth, (float) rulerHeight - 10.0f);
+            const auto flag = juce::Rectangle<float> (x, 2.0f, labelWidth, (float) rulerHeight() - 10.0f);
             g.setColour (colour);
             g.fillRect (flag);
-            g.fillRect (juce::Rectangle<float> (x, 0.0f, 1.0f, (float) rulerHeight));
+            g.fillRect (juce::Rectangle<float> (x, 0.0f, 1.0f, (float) rulerHeight()));
             g.setColour (palette::onAccent);
             g.drawText (m.name, flag.withTrimmedLeft (5.0f), juce::Justification::centredLeft, false);
         }
@@ -438,7 +443,7 @@ namespace mxj
         if (! workspace.isReady())
             return;
 
-        if (e.y < rulerHeight)
+        if (e.y < rulerHeight())
         {
             setMouseCursor (markerAt (e.x) >= 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
             return;
@@ -461,7 +466,7 @@ namespace mxj
 
         if (e.mods.isPopupMenu())
         {
-            if (e.y < rulerHeight)
+            if (e.y < rulerHeight())
                 if (const auto m = markerAt (e.x); m >= 0)
                     workspace.selectMarker (m);
 
@@ -472,7 +477,7 @@ namespace mxj
         if (! workspace.isReady() || workspace.isRecording())
             return;
 
-        if (e.y < rulerHeight)
+        if (e.y < rulerHeight())
         {
             if (const auto m = markerAt (e.x); m >= 0)
             {
@@ -537,7 +542,7 @@ namespace mxj
 
     void WaveformView::mouseDoubleClick (const juce::MouseEvent& e)
     {
-        if (e.y < rulerHeight)
+        if (e.y < rulerHeight())
         {
             if (markerAt (e.x) >= 0)
                 run ("markers.rename");

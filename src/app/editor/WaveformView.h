@@ -40,7 +40,8 @@ namespace mxj
         void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
         void mouseMagnify (const juce::MouseEvent&, float scaleFactor) override;
 
-        static constexpr int rulerHeight = 24;
+        /** Height of the time ruler (grows with the text size). */
+        static int rulerHeight();
 
     private:
         class Playhead;

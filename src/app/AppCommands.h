@@ -19,6 +19,9 @@ namespace mxj
         std::function<void()> showAbout;
         std::function<void (const juce::String& languageCode)> setLanguage;
         std::function<void()> showAudioSettings;
+        std::function<void (const juce::String& effectId)> showEffect;
+        std::function<void()> showLoudnessAndLevels;
+        std::function<void (float scale)> setTextScale;
     };
 
     /** Registers the commands of the program. */

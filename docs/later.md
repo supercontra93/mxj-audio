@@ -21,3 +21,4 @@ Ideas that came up during a phase but are outside its scope. Reviewed at the sta
 - Loudness weighting for surround channels (today every channel counts equally, right for mono and stereo).
 - Anti-aliasing filter before Change Speed speeds up (today plain interpolation).
 - Effect dialogs that stay open while editing (non-modal) and A/B comparison of settings.
+- File > New Audio File: an empty file with a chosen sample rate and channel count (the menu entry exists but is disabled; today a new file comes from recording).

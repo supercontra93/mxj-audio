@@ -40,6 +40,10 @@ namespace mxj::dsp
             effect to a file removes this delay. */
         virtual int getLatencyFrames() const { return 0; }
 
+        /** Why processing failed (a script error in an MXJ plugin), or empty.
+            Read after applying the effect on a worker thread. */
+        virtual juce::String getError() const { return {}; }
+
         const ParameterValues& getParameters() const noexcept { return *params; }
 
     protected:
@@ -64,7 +68,9 @@ namespace mxj::dsp
         {
             realtime,  ///< processes audio as it plays: live preview and effect rack
             generator, ///< makes new audio (tone, noise); inserted at the cursor
-            offline    ///< needs the whole selection first (normalize, loudness, speed)
+            offline,   ///< needs the whole selection first (normalize, loudness, speed)
+            script     ///< MXJ (Lua) plugin effect: applied chunk by chunk on a worker thread,
+                       ///< never on the audio thread, so no live preview and no rack
         };
 
         juce::String id;        ///< stable, stored in presets and racks: never rename
@@ -85,7 +91,19 @@ namespace mxj::dsp
         /** True if the effect shows a gain reduction meter (dynamics). */
         bool showsGainReduction = false;
 
+        /** Where the effect comes from, for the interface: empty for built-in
+            effects, else "VST3", "CLAP" or "MXJ plugin". */
+        juce::String source;
+
+        /** Hosted VST3 and CLAP plugins: makes the shared state of new values.
+            `instance` names one live plugin: values made with the same non-empty
+            name share one plugin (the effect rack of a track and its mixer
+            strip), an empty name makes a separate plugin (applying an effect,
+            mixdown). `saved` is a state from EffectState::save() to load. */
+        std::function<std::shared_ptr<EffectState> (const juce::String& instance, const juce::String& saved)> createState;
+
         bool isRealtime() const noexcept { return kind == Kind::realtime; }
+        bool isHostedPlugin() const noexcept { return createState != nullptr; }
 
         /** Index of a parameter by id, or -1. */
         int indexOf (const juce::String& parameterId) const;
@@ -93,7 +111,13 @@ namespace mxj::dsp
         /** Default values of all parameters. */
         std::vector<float> getDefaults() const;
 
-        /** New shared values set to the defaults. */
+        /** New shared values set to the defaults (with a new, separate plugin
+            state for hosted plugins). */
         ParameterValuesPtr createValues() const;
+
+        /** New shared values set to `values`; for hosted plugins with the plugin
+            `instance` (see createState) loaded with `savedState`. */
+        ParameterValuesPtr createValues (const std::vector<float>& values, const juce::String& instance,
+                                         const juce::String& savedState) const;
     };
 }

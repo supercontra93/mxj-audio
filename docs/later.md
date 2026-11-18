@@ -33,3 +33,16 @@ Ideas that came up during a phase but are outside its scope. Reviewed at the sta
 - Project: "Consolidate" removes audio in `Name_data/` that no clip uses any more; "Save a copy with all files"
   that copies referenced WAV/AIFF files into the project folder.
 - Lower look-ahead for the session mixer (today about 0.17 s between moving a fader and hearing it).
+- Plugins (phase 6): run VST3 and CLAP plugins in a separate process too (today only scanning is), so a plugin
+  that crashes while playing cannot close the program. After v1.0.
+- Plugins: the online community catalogue (a GitHub repository, downloads checked with SHA-256 and a signature)
+  opens with the release (phase 8); phase 6 reads the local test catalogue next to the program.
+- Plugins: Lua effects in real time (preview and effect rack). Needs a garbage-collector-free audio path
+  (for example a separate Lua state per block with a fixed memory pool); today they are applied offline.
+- Plugins: keep a plugin effect in the rack or project when its plugin is missing (today it is dropped and the
+  rest of the chain plays); show which plugin is missing.
+- Plugins: instruments (VST3/CLAP) once MIDI arrives; plugin parameter automation in the session; plugin presets
+  (programs) in the effect window; a filter for the plugin list.
+- Plugins: check plugins with pluginval in CI (GPLv3 tool, run only, already in the licence audit).
+- Packaging: the install step also copies JUCE's own CMake helper files (`bin`, `include`, `lib`) into the zip;
+  leave them out.

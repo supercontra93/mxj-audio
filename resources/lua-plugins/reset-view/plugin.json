@@ -1,0 +1,14 @@
+{
+  "id": "mxj.examples.resetview",
+  "name": "Reset View",
+  "version": "1.0.0",
+  "author": "MXJ AUDIO",
+  "license": "MIT",
+  "type": "tool",
+  "category": "Tools",
+  "description": "Clears the selection, shows the whole file and moves the cursor to the start. Shows how a tool runs program commands.",
+  "minMxjVersion": "0.6.0",
+  "apiVersion": 1,
+  "permissions": ["commands"],
+  "parameters": []
+}

@@ -120,8 +120,9 @@ namespace
 TEST_CASE ("Every effect type is complete and its presets fit its parameters", "[effects]")
 {
     juce::StringArray ids;
-    for (const auto& t : dsp::catalogue::all())
+    for (const auto* entry : dsp::catalogue::all())
     {
+        const auto& t = *entry;
         INFO (t.id);
         CHECK (t.id.isNotEmpty());
         CHECK (! ids.contains (t.id));
@@ -150,8 +151,9 @@ TEST_CASE ("Every effect type is complete and its presets fit its parameters", "
 
 TEST_CASE ("Every real-time effect turns noise into finite audio at any block size", "[effects]")
 {
-    for (const auto& t : dsp::catalogue::all())
+    for (const auto* entry : dsp::catalogue::all())
     {
+        const auto& t = *entry;
         if (t.create == nullptr)
             continue;
 

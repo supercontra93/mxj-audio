@@ -9,7 +9,8 @@ namespace mxj
 {
     /** The controls of one effect, drawn automatically from its parameter list
         (master plan, section 8): a slider for numbers, a list for choices, a
-        switch for on/off values. Above them a frequency response curve for
+        switch for on/off values. VST3 and CLAP plugins get a button that opens
+        their own window. Above them a frequency response curve for
         equalisers and filters, below them a gain reduction meter for dynamics.
 
         Moving a control writes the shared ParameterValues at once, so the sound
@@ -55,6 +56,10 @@ namespace mxj
         std::vector<Row> rows;
         std::unique_ptr<ResponseCurve> curve;
         std::unique_ptr<ReductionMeter> reduction;
+
+        // VST3 and CLAP plugins: their controls are in their own window.
+        std::unique_ptr<juce::TextButton> windowButton;
+        bool pluginWasEdited = false;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ParameterPanel)
     };

@@ -1373,13 +1373,15 @@ namespace mxj
 
             runJob (name, [settings, channels, rate, frames, result, &store, control] (BackgroundJob& j)
             {
-                *result = dsp::generate (settings, channels, rate, frames, store, control (j));
+                *result = dsp::generate (settings, channels, rate, frames, store, control (j), &j.error);
                 return result->getNumChannels() > 0;
             },
             [this, name, result] (bool ok)
             {
                 if (ok && document != nullptr)
                     applyEdit (name, edits::paste (document->getAudioState(), getEditRange(), *result));
+                else if (jobError.isNotEmpty())
+                    showError (name, jobError);
             });
             return;
         }
@@ -1482,7 +1484,10 @@ namespace mxj
         processRange (name, range, [settings, following, control] (const AudioSequence& input, BlockStore& store, BackgroundJob& j)
         {
             auto chain = dsp::ProcessorChain::create ({ settings });
-            return dsp::render (input, *chain, store, following, control (j));
+            auto result = dsp::render (input, *chain, store, following, control (j));
+            if (const auto error = chain->getError(); error.isNotEmpty())
+                j.error = error; // an MXJ plugin failed: shown, the audio stays as it was
+            return result;
         });
     }
 
@@ -1547,6 +1552,23 @@ namespace mxj
         {
             if (ok && onDone != nullptr)
                 onDone (*stats);
+        });
+    }
+
+    void Workspace::analyseWith (const juce::String& title, std::function<bool (const AudioSequence&, BackgroundJob&)> work,
+                                 std::function<void (bool, const juce::String&)> onDone)
+    {
+        if (! isReady() || isBusy() || isRecording())
+            return;
+
+        const auto range = getEffectRange();
+        auto input = document->getAudio().getRange (range.getStart(), range.getLength());
+
+        runJob (title, [input, work] (BackgroundJob& j) { return work (input, j); },
+                [this, onDone] (bool ok)
+        {
+            if (onDone != nullptr)
+                onDone (ok, jobError);
         });
     }
 

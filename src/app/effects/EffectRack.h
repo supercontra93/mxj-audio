@@ -24,6 +24,7 @@ namespace mxj
             const dsp::EffectType* type = nullptr;
             dsp::ParameterValuesPtr values;
             std::shared_ptr<std::atomic<bool>> enabled;
+            juce::String instance; ///< hosted plugins: names the live plugin (shared with the mixer)
         };
 
         /** Adds an effect at the end. Returns its index, or -1 for an unknown or

@@ -195,6 +195,12 @@ namespace mxj
         /** Measures the effect range in the background; `onDone` gets the result. */
         void analyse (std::function<void (const dsp::AudioStats&)> onDone);
 
+        /** Runs `work` on the selection (or the whole file) in the background,
+            without changing the audio (analysis plugins). `work` may set the
+            job's error; `onDone` gets whether it succeeded and the error. */
+        void analyseWith (const juce::String& title, std::function<bool (const AudioSequence& audio, BackgroundJob& job)> work,
+                          std::function<void (bool ok, const juce::String& error)> onDone);
+
         /** Live preview from an effect dialog: what plays goes through this effect
             (instead of the rack) until stopPreview(). Starts playing the effect
             range from its start if nothing plays. */

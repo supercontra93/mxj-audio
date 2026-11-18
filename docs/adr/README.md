@@ -14,3 +14,4 @@ a changed decision gets a new record that supersedes the old one.
 | [0007](0007-effects-and-loudness.md) | Effect framework, lock-free live chain, EBU R128 loudness; no new dependency | Accepted |
 | [0008](0008-spectral-and-repair.md) | Own FFT and STFT, spectral heal and band effects, spectral-gate noise reduction, AR interpolation for clicks and clipping; no new dependency | Accepted |
 | [0009](0009-multitrack-session.md) | Session as a value with snapshot undo, mixer on the disk thread, buses always to the master, aligned session recording, `.mxj` project with a data folder; no new dependency | Accepted |
+| [0010](0010-plugins.md) | VST3 through JUCE, own CLAP host (headers), scanner in a separate process, Lua 5.4.8 sandbox with a versioned API, dynamic effect types, local test catalogue with SHA-256 | Accepted |

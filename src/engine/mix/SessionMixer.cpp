@@ -108,13 +108,26 @@ namespace mxj
         std::vector<const dsp::EffectType*> pointers;
         std::vector<const dsp::EffectSettings*> used;
 
+        // A hosted plugin is shared with the track's effect panel through its
+        // instance name. A name used by another track (a copied track) gets a
+        // plugin of its own.
+        const auto usedElsewhere = [this, trackId] (const juce::String& instance)
+        {
+            for (const auto& [id, other] : effectStates)
+                if (id != trackId && other.types.contains (instance, false))
+                    return true;
+
+            return false;
+        };
+
         for (const auto& s : settings)
         {
             const auto* type = dsp::catalogue::find (s.typeId);
             if (type == nullptr || ! type->isRealtime() || type->create == nullptr)
                 continue;
 
-            types.add (s.typeId);
+            // The instance is part of the key: another plugin of the same type needs a new chain.
+            types.add (type->isHostedPlugin() ? s.typeId + "#" + s.instance : s.typeId);
             pointers.push_back (type);
             used.push_back (&s);
         }
@@ -129,9 +142,13 @@ namespace mxj
             state.values.clear();
             state.enabled.clear();
 
-            for (const auto* type : pointers)
+            for (const auto* s : used)
             {
-                state.values.push_back (type->createValues());
+                auto shared = *s;
+                if (! sharePlugins || (shared.instance.isNotEmpty() && usedElsewhere (shared.typeId + "#" + shared.instance)))
+                    shared.instance.clear();
+
+                state.values.push_back (shared.createValues (sharePlugins));
                 state.enabled.push_back (std::make_shared<std::atomic<bool>> (true));
             }
         }
@@ -140,6 +157,9 @@ namespace mxj
         {
             state.values[i]->setAll (used[i]->values);
             state.enabled[i]->store (used[i]->enabled);
+
+            if (state.values[i]->state != nullptr && ! changed)
+                state.values[i]->state->restore (used[i]->state); // undo of a plugin change; nothing if unchanged
         }
 
         return changed;
@@ -599,6 +619,7 @@ namespace mxj
                                          const dsp::WorkControl& control)
     {
         SessionMixer mixer;
+        mixer.sharePlugins = false; // own plugins: the live ones may be playing at the same time
         mixer.setSession (session);
         mixer.seek (range.getStart());
 

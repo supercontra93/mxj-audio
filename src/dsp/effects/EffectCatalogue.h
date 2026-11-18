@@ -9,17 +9,37 @@
 
 namespace mxj::dsp
 {
-    /** The list of built-in effect types. Thread safe (built once, then read only). */
+    /** The list of effect types: the built-in effects, then those of plugins
+        (VST3, CLAP and MXJ plugins, phase 6) added while the program runs.
+        Thread safe. Not for the audio thread.
+
+        A type, once added, stays in memory until the program ends, so pointers
+        to it stay valid even after its plugin is removed (it is then only
+        hidden from all() and find()).
+    */
     namespace catalogue
     {
-        /** All effect types, in menu order. */
-        const std::vector<EffectType>& all();
+        /** All effect types that can be used now, in menu order. */
+        std::vector<const EffectType*> all();
 
         /** The type with this id, or nullptr. */
         const EffectType* find (const juce::String& id);
 
         /** Menu groups, in order. English. */
         juce::StringArray categories();
+
+        /** Adds a plugin's effect type. A type with the same id is replaced
+            (the old one is hidden). Returns the stored type. */
+        const EffectType* add (EffectType type);
+
+        /** Hides a plugin's effect type. Built-in effects cannot be removed. */
+        void remove (const juce::String& id);
+
+        /** Hides every added type whose id starts with `prefix` ("vst3:", "lua:"). */
+        void removeAllWithPrefix (const juce::String& prefix);
+
+        /** Counts changes, so lists built from all() know when to update. */
+        int getChangeCount();
     }
 
     //==============================================================================
@@ -30,11 +50,20 @@ namespace mxj::dsp
         juce::String typeId;
         std::vector<float> values; ///< in parameter order
         bool enabled = true;
+        juce::String state;        ///< hosted plugins: the plugin's state (EffectState::save)
+        juce::String instance;     ///< hosted plugins: names the live plugin (see EffectType::createState)
+
+        /** New values for these settings (with the plugin state of hosted
+            plugins). `shareLivePlugin`: use the live plugin named by `instance`
+            (racks, mixer) instead of a separate one (applying, mixdown).
+            nullptr if the type is unknown. */
+        ParameterValuesPtr createValues (bool shareLivePlugin) const;
 
         /** Default values of the type (an empty typeId if the type is unknown). */
         static EffectSettings defaultsFor (const juce::String& typeId);
 
-        /** {"type": id, "enabled": bool, "values": {parameterId: value, ...}}.
+        /** {"type": id, "enabled": bool, "values": {parameterId: value, ...}},
+            plus "state" and "instance" for hosted plugins.
             Values are stored by parameter id, so adding parameters later keeps
             old presets working. */
         juce::var toVar() const;
@@ -66,7 +95,8 @@ namespace mxj::dsp
         void add (std::unique_ptr<EffectProcessor> processor, std::shared_ptr<std::atomic<bool>> enabled = nullptr);
 
         /** A chain for applying effects: one processor per enabled entry, each with
-            its own copy of the values. Unknown and realtime-incapable types are skipped. */
+            its own copy of the values (and its own plugin). Unknown and offline
+            types are skipped; MXJ plugin effects (Kind::script) are included. */
         static std::unique_ptr<ProcessorChain> create (const ChainSettings&);
 
         void prepare (double sampleRate, int maximumBlockSize, int numChannels);
@@ -77,6 +107,9 @@ namespace mxj::dsp
 
         /** Total look-ahead of the enabled processors. */
         int getLatencyFrames() const;
+
+        /** The first error a processor reported (getError), or empty. */
+        juce::String getError() const;
 
         bool isEmpty() const noexcept { return entries.empty(); }
         int size() const noexcept { return (int) entries.size(); }

@@ -57,7 +57,7 @@ jobs:
             throw "The log does not say the multitrack session worked"
           }
 
-      - name: Smoke test with a 10 minute WAV (opens, loads, cuts, undoes, applies effects, exports, quits cleanly)
+      - name: Smoke test with a 10 minute WAV (opens, loads, cuts, undoes, applies effects and an MXJ plugin, exports, quits cleanly)
         shell: pwsh
         run: |
           $exe  = "build/src/app/MXJAudio_artefacts/Release/MXJ AUDIO.exe"
@@ -78,12 +78,22 @@ jobs:
           if (-not (Select-String -Path (Join-Path $data "logs/*.log") -Pattern "Smoke test: repair OK" -Quiet)) {
             throw "The log does not say the repair tools worked"
           }
+          if (-not (Select-String -Path (Join-Path $data "logs/*.log") -Pattern "Smoke test: plugins OK" -Quiet)) {
+            throw "The log does not say the MXJ plugin was installed from the catalogue and applied"
+          }
           if (-not (Select-String -Path (Join-Path $data "logs/*.log") -Pattern "Smoke test: edit and export OK" -Quiet)) {
             throw "The log does not say the edit and export worked"
           }
 
       - name: Package (portable folder)
         run: cmake --install build --config Release --prefix dist/MXJ-AUDIO
+
+      - name: Check the package (scanner program and test catalogue are included)
+        shell: pwsh
+        run: |
+          foreach ($f in "dist/MXJ-AUDIO/mxj-plugin-scanner.exe", "dist/MXJ-AUDIO/catalog/index.json", "dist/MXJ-AUDIO/licenses/LICENSE-Lua.txt") {
+            if (-not (Test-Path $f)) { throw "Missing in the package: $f" }
+          }
 
       - uses: actions/upload-artifact@v4
         with:
@@ -127,4 +137,5 @@ jobs:
           grep -q "file loaded, 28800000 frames" "$RUNNER_TEMP"/mxj-data-file/logs/*.log
           grep -q "Smoke test: effects OK" "$RUNNER_TEMP"/mxj-data-file/logs/*.log
           grep -q "Smoke test: repair OK" "$RUNNER_TEMP"/mxj-data-file/logs/*.log
+          grep -q "Smoke test: plugins OK" "$RUNNER_TEMP"/mxj-data-file/logs/*.log
           grep -q "Smoke test: edit and export OK" "$RUNNER_TEMP"/mxj-data-file/logs/*.log

@@ -12,6 +12,9 @@ namespace mxj::dialogs
     /** Shows information with an OK button. */
     void showInfo (const juce::String& title, const juce::String& message);
 
+    /** Shows a longer text (a report) that can be selected and copied. */
+    void showText (const juce::String& title, const juce::String& text, juce::Component* parent = nullptr);
+
     /** Shows a warning with an OK button. */
     void showWarning (const juce::String& title, const juce::String& message);
 

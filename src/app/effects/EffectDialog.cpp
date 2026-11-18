@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "app/effects/EffectDialog.h"
+#include "app/plugins/PluginWindow.h"
 #include "app/theme/Fonts.h"
 #include "app/theme/Palette.h"
 #include "app/ui/Dialogs.h"
@@ -70,7 +71,7 @@ namespace mxj
         addToRackButton.setTooltip (TRANS ("Put this effect with these settings into the effect rack"));
         addToRackButton.onClick = [this]
         {
-            workspace.getRack().add (dsp::EffectSettings { type.id, values->getAll(), true });
+            workspace.getRack().add (getSettings());
             addToRackButton.setButtonText (TRANS ("Added"));
         };
         addToRackButton.setVisible (realtime);
@@ -94,6 +95,14 @@ namespace mxj
         workspace.addChangeListener (this);
         updateButtons();
 
+        // VST3 and CLAP plugins are set in their own window: open it at once.
+        if (PluginWindow::canShow (values->state))
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<EffectDialog> (this)]
+            {
+                if (safe != nullptr)
+                    PluginWindow::show (safe->values->state, safe->type.name);
+            });
+
         const auto panelHeight = panel.getIdealHeight();
         const auto width = fonts::scaled (type.response != nullptr ? 620 : 560);
         panel.setSize (width - 2 * padding - 12, panelHeight);
@@ -101,8 +110,18 @@ namespace mxj
         setSize (width, headerHeight() + juce::jmin (panelHeight, maxViewport) + buttonHeight() + 3 * padding + 8);
     }
 
+    dsp::EffectSettings EffectDialog::getSettings() const
+    {
+        dsp::EffectSettings settings { type.id, values->getAll(), true };
+        if (values->state != nullptr)
+            settings.state = values->state->save(); // VST3 and CLAP plugins: everything set in their window
+
+        return settings;
+    }
+
     EffectDialog::~EffectDialog()
     {
+        PluginWindow::closeFor (values->state);
         lastValues()[type.id] = values->getAll();
         workspace.removeChangeListener (this);
         workspace.stopPreview();
@@ -227,7 +246,7 @@ namespace mxj
     void EffectDialog::apply()
     {
         workspace.stopPreview();
-        workspace.applyEffect ({ type.id, values->getAll(), true });
+        workspace.applyEffect (getSettings());
         closeDialog();
     }
 

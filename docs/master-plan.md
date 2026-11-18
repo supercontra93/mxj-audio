@@ -10,8 +10,14 @@ Short summary, so the repository can be understood without it:
 - **Stack:** C++20, JUCE 9, CMake. Built and tested on GitHub Actions.
 - **Architecture:** seven layers (see `CLAUDE.md`), non-destructive audio model, one command
   system, one observable project tree, background caches, platform code behind `platform/`.
-- **Plugins:** VST3 and CLAP hosting, Lua 5.4 "MXJ plugins", in-app plugin page, community
-  catalogue as a GitHub repository (phase 6).
+- **Plugins:** VST3 and CLAP hosting, Lua 5.4 "MXJ plugins", in-app plugin page (phase 6). The
+  community catalogue becomes a GitHub repository with the release; phase 6 ships a local test catalogue.
+- **AI control (phase 7, added 2026-11-18 at Baybars' request):** a local MCP server (Model Context Protocol,
+  open and free) inside the program. An AI assistant can list and run commands, read the state (open file,
+  selection, levels), apply effects, take a screenshot of the window and read the log. Off by default, switched on
+  in the settings, reachable only from the same computer (no network), asks before steps that cannot be undone.
+  Also used in CI to drive the real program in end-to-end tests with screenshots, next to pluginval for real
+  VST3 plugins.
 - **Updates:** GitHub Releases plus Ed25519-signed manifest, built in phase 8, off until release.
 - **Project file:** `.mxj` (JSON) plus a data folder.
 - **Roadmap:** phase 0 foundation, 1 audio core (0.1), 2 editing and recording (0.2),

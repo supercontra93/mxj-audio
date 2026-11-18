@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "app/effects/ParameterPanel.h"
+#include "app/plugins/PluginWindow.h"
 #include "app/theme/Fonts.h"
 #include "app/theme/Palette.h"
 
@@ -206,6 +207,14 @@ namespace mxj
             addAndMakeVisible (*reduction);
         }
 
+        if (PluginWindow::canShow (values->state))
+        {
+            windowButton = std::make_unique<juce::TextButton> (TRANS ("Plugin Window") + "...");
+            windowButton->setTooltip (TRANS ("Open the plugin's own window with all its controls"));
+            windowButton->onClick = [this] { PluginWindow::show (values->state, type.name); };
+            addAndMakeVisible (*windowButton);
+        }
+
         refreshFromValues();
         startTimerHz (25);
     }
@@ -247,6 +256,8 @@ namespace mxj
             h += curveHeight() + 12;
         if (reduction != nullptr)
             h += meterHeight() + 6;
+        if (windowButton != nullptr)
+            h += rowHeight() + 8;
 
         return h;
     }
@@ -257,6 +268,16 @@ namespace mxj
             reduction->update();
         if (curve != nullptr)
             curve->update(); // values may also change from a preset or the rack
+
+        // A control moved in the plugin's own window: tell the owner once
+        // (it saves the plugin state, which clears the flag).
+        if (auto* plugin = dynamic_cast<plugins::HostedPlugin*> (values->state.get()))
+        {
+            const auto edited = plugin->isEdited();
+            if (edited && ! pluginWasEdited && onChange != nullptr)
+                onChange();
+            pluginWasEdited = edited;
+        }
     }
 
     void ParameterPanel::resized()
@@ -290,6 +311,9 @@ namespace mxj
             area.removeFromTop (6);
             reduction->setBounds (area.removeFromTop (meterHeight()));
         }
+
+        if (windowButton != nullptr)
+            windowButton->setBounds (area.removeFromTop (rowHeight()).withWidth (juce::jmin (area.getWidth(), fonts::scaled (220))));
     }
 
     void ParameterPanel::paint (juce::Graphics& g)

@@ -34,6 +34,13 @@ namespace mxj::dsp::builtin
     EffectType matchLoudness();
     EffectType speed();
 
+    // Noise reduction and repair (phase 4: repair/NoiseReduction.cpp, repair/Restoration.cpp)
+    EffectType noiseReduction();
+    EffectType adaptiveNoiseReduction();
+    EffectType humRemoval();
+    EffectType clickRemoval();
+    EffectType clipRepair();
+
     // Generators (Generators.cpp)
     EffectType toneGenerator();
     EffectType noiseGenerator();

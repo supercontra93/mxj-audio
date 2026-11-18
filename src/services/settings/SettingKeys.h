@@ -24,4 +24,10 @@ namespace mxj::keys
     inline constexpr const char* showSpectrum        = "ui.showSpectrum";         // spectrum analyser under the waveform
     inline constexpr const char* showRack            = "ui.showRack";             // effect rack panel on the left
     inline constexpr const char* effectRack          = "effects.rack";            // JSON of the rack (dsp::chainToVar)
+    inline constexpr const char* newFileSampleRate   = "newFile.sampleRate";      // Hz, last choice in File > New Audio File
+    inline constexpr const char* newFileChannels     = "newFile.channels";        // 1 = mono, 2 = stereo
+    inline constexpr const char* showSpectral        = "ui.showSpectral";         // spectrogram under the waveform (phase 4)
+    inline constexpr const char* spectralScale       = "spectral.scale";          // "linear", "log" or "mel"
+    inline constexpr const char* spectralResolution  = "spectral.fftSize";        // 512, 1024, 2048, 4096 or 8192
+    inline constexpr const char* spectralColours     = "spectral.colours";        // "amber", "gray" or "rainbow"
 }

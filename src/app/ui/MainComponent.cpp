@@ -183,8 +183,14 @@ namespace mxj
                 groupsDone.add (group);
                 juce::PopupMenu sub;
                 for (const auto* item : items)
-                    if (item->group == group)
-                        sub.addCommandItem (&commandManager, toJuceId (item->id));
+                {
+                    if (item->group != group)
+                        continue;
+
+                    sub.addCommandItem (&commandManager, toJuceId (item->id));
+                    if (separators.contains (item->id))
+                        sub.addSeparator();
+                }
 
                 menu.addSubMenu (TRANS (group), sub);
             }

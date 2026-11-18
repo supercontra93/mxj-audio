@@ -44,6 +44,7 @@ namespace mxj::dsp
                     chorus(), flanger(), phaser(),
                     stereoTools(),
                     speed(),
+                    noiseReduction(), adaptiveNoiseReduction(), humRemoval(), clickRemoval(), clipRepair(),
                     toneGenerator(), noiseGenerator()
                 };
             }();

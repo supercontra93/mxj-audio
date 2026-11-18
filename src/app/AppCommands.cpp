@@ -20,9 +20,9 @@ namespace mxj
     {
         return { "file.close", "file.exportSelection",
                  "edit.redo", "edit.delete", "edit.selectNone", "edit.fadeOut", "markers.previous",
-                 "view.zoomSelection", "view.textSize.small",
+                 "view.zoomSelection", "view.spectral", "view.spectral.mel", "view.spectral.res8192", "view.textSize.small",
                  "transport.toEnd",
-                 "effects.tone", "effects.applyRack" };
+                 "effects.tone", "effects.applyRack", "effects.clipRepair" };
     }
 
     void registerAppCommands (AppContext& ctx, Workspace& w, AppActions actions)
@@ -39,7 +39,7 @@ namespace mxj
         const auto notBusy = [&w] { return ! w.isBusy() && ! w.isRecording(); };
 
         // File
-        c.add ({ "file.new",        "New Audio File...",          "File", "Create an empty audio file",         "command + N",         never,   [] {} });
+        c.add ({ "file.new",        "New Audio File...",          "File", "Create an empty audio file",         "command + N",         notBusy, [&w] { w.showNewFileDialog(); } });
         c.add ({ "file.newSession", "New Multitrack Session...",  "File", "Create a multitrack session",        "command + shift + N", never,   [] {} });
         c.add ({ "file.open",       "Open...",                    "File", "Open an audio file or project",      "command + O",         notBusy, [&w] { w.showOpenDialog(); } });
         c.add ({ "file.close",      "Close",                      "File", "Close the open file",                "command + W",         [&w] { return w.hasDocument() && ! w.isBusy(); }, [&w] { w.closeFile(); } });
@@ -84,6 +84,41 @@ namespace mxj
                  nullptr, [setLanguage = actions.setLanguage] { setLanguage ("en"); },
                  [] { return Localisation::getCurrentLanguage() == "en"; } });
 
+        // Spectral display (phase 4)
+        const auto setChoice = [&ctx, &w] (const char* key, juce::var value)
+        {
+            return [&ctx, &w, key, value]
+            {
+                ctx.settings.set (key, value);
+                if (! ctx.settings.getBool (keys::showSpectral))
+                    ctx.settings.set (keys::showSpectral, true);
+                w.sendChangeMessage();
+            };
+        };
+        const auto choiceIs = [&ctx] (const char* key, juce::var value) { return [&ctx, key, value] { return ctx.settings.get (key) == value; }; };
+        const auto spectralGroup = "Spectrogram";
+        c.add ({ "view.spectral", "Spectral Frequency Display", "View", "Show the frequencies (spectrogram) under the waveform", "shift + D",
+                 nullptr, [&ctx, &w] { ctx.settings.set (keys::showSpectral, ! ctx.settings.getBool (keys::showSpectral)); w.sendChangeMessage(); },
+                 [&ctx] { return ctx.settings.getBool (keys::showSpectral); } });
+        c.add ({ "view.spectral.linear", "Linear Frequency Scale", "View", "Spectrogram: every kHz takes the same height", {}, nullptr,
+                 setChoice (keys::spectralScale, "linear"), choiceIs (keys::spectralScale, "linear"), spectralGroup });
+        c.add ({ "view.spectral.log", "Logarithmic Frequency Scale", "View", "Spectrogram: every octave takes the same height (like hearing)", {}, nullptr,
+                 setChoice (keys::spectralScale, "log"), choiceIs (keys::spectralScale, "log"), spectralGroup });
+        c.add ({ "view.spectral.mel", "Mel Frequency Scale", "View", "Spectrogram: the mel scale, between linear and logarithmic", {}, nullptr,
+                 setChoice (keys::spectralScale, "mel"), choiceIs (keys::spectralScale, "mel"), spectralGroup });
+        c.add ({ "view.spectral.res512", "Resolution: Fast Changes (512)", "View", "Spectrogram: sharp in time, blurred in frequency", {}, nullptr,
+                 setChoice (keys::spectralResolution, 512), choiceIs (keys::spectralResolution, 512), spectralGroup });
+        c.add ({ "view.spectral.res2048", "Resolution: Balanced (2048)", "View", "Spectrogram: balanced between time and frequency", {}, nullptr,
+                 setChoice (keys::spectralResolution, 2048), choiceIs (keys::spectralResolution, 2048), spectralGroup });
+        c.add ({ "view.spectral.res8192", "Resolution: Fine Frequencies (8192)", "View", "Spectrogram: sharp in frequency, blurred in time", {}, nullptr,
+                 setChoice (keys::spectralResolution, 8192), choiceIs (keys::spectralResolution, 8192), spectralGroup });
+        c.add ({ "view.spectral.amber", "Amber Colours", "View", "Spectrogram colours: dark to amber to white", {}, nullptr,
+                 setChoice (keys::spectralColours, "amber"), choiceIs (keys::spectralColours, "amber"), spectralGroup });
+        c.add ({ "view.spectral.gray", "Gray Colours", "View", "Spectrogram colours: black to white", {}, nullptr,
+                 setChoice (keys::spectralColours, "gray"), choiceIs (keys::spectralColours, "gray"), spectralGroup });
+        c.add ({ "view.spectral.rainbow", "Rainbow Colours", "View", "Spectrogram colours: blue to red", {}, nullptr,
+                 setChoice (keys::spectralColours, "rainbow"), choiceIs (keys::spectralColours, "rainbow"), spectralGroup });
+
         // Text size (phase 3: Baybars found the text too small)
         const auto textSize = [setTextScale = actions.setTextScale] (float scale)
         {
@@ -119,6 +154,18 @@ namespace mxj
                 c.add ({ "effects.reverse", "Reverse", "Effects", "Play the selection backwards", {}, editable,
                          [&w] { w.reverseAudio(); }, nullptr, type.category });
         }
+
+        // Noise reduction and spectral repair (phase 4), in the same submenu as the repair effects.
+        const auto repairGroup = "Noise Reduction and Repair";
+        const auto spectralSelected = [&w] { return w.canEdit() && w.hasSpectralSelection(); };
+        c.add ({ "repair.captureNoisePrint", "Capture Noise Print", "Effects", "Measure the background noise in the selection, for Noise Reduction", "shift + P",
+                 selected, [&w] { w.captureNoisePrint(); }, nullptr, repairGroup });
+        c.add ({ "spectral.heal", "Heal Selection", "Effects", "Heal the selection from the sound around it: removes coughs, clicks and other short noises", "command + U",
+                 selected, [&w] { w.healSelection(); }, nullptr, repairGroup });
+        c.add ({ "spectral.changeLevel", "Change Level of Selection...", "Effects", "Raise or lower the selection or the selected frequencies by a number of dB", {},
+                 selected, [&w] { w.showChangeLevelDialog(); }, nullptr, repairGroup });
+        c.add ({ "spectral.deleteBand", "Delete Selected Frequencies", "Effects", "Remove only the frequencies selected in the spectrogram (also the Delete key)", {},
+                 spectralSelected, [&w] { w.deleteSelectedFrequencies(); }, nullptr, repairGroup });
 
         c.add ({ "effects.applyRack", "Apply Effect Rack", "Effects", "Apply the effects of the rack to the selection, or to the whole file", {},
                  [&w] { return w.canEdit() && w.getRack().hasActiveEffects(); }, [&w] { w.applyRack(); } });

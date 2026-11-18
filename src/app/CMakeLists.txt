@@ -59,8 +59,12 @@ add_library(mxj_app STATIC
     editor/EditorPage.h
     editor/ExportDialog.cpp
     editor/ExportDialog.h
+    editor/NewFileDialog.cpp
+    editor/NewFileDialog.h
     editor/RecordingPanel.cpp
     editor/RecordingPanel.h
+    editor/SpectrogramRenderer.cpp
+    editor/SpectrogramRenderer.h
     editor/WaveformView.cpp
     editor/WaveformView.h
     settings/AudioSettingsPanel.cpp

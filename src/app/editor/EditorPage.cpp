@@ -90,7 +90,7 @@ namespace mxj
 
     //==============================================================================
     EditorPage::EditorPage (Workspace& w, const CommandRegistry& c, RunCommand runCommand, Recorder& recorder, AppContext& ctx)
-        : workspace (w), commands (c), waveform (w, c, runCommand), recordingPanel (recorder), context (ctx),
+        : workspace (w), commands (c), waveform (w, c, runCommand, ctx.settings), recordingPanel (recorder), context (ctx),
           rackPanel (w, ctx.presets), meterPanel (ctx.audio.getPlayback().getMeter()), spectrumView (ctx.audio.getPlayback())
     {
         struct Spec { const char* command; const char* icon; bool endsGroup; };

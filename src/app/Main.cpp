@@ -16,6 +16,7 @@
 #include "app/theme/Fonts.h"
 #include "app/theme/GrafitLookAndFeel.h"
 #include "app/ui/AboutPanel.h"
+#include "app/ui/Dialogs.h"
 #include "app/ui/MainComponent.h"
 #include "app/ui/MainWindow.h"
 #include "core/Version.h"
@@ -201,6 +202,15 @@ namespace mxj
 
         void showEffect (const juce::String& effectId)
         {
+            if (effectId == "noiseReduction" && ! workspace->hasNoisePrint())
+            {
+                dialogs::showInfo (TRANS ("Noise Reduction (Noise Print)"),
+                                   TRANS ("First tell MXJ AUDIO what the noise sounds like: select a part that holds only the background noise "
+                                          "(a pause, at least half a second) and choose Effects > Noise Reduction and Repair > Capture Noise Print (Shift+P). "
+                                          "Then select the part to clean, or nothing for the whole file, and open Noise Reduction again."));
+                return;
+            }
+
             if (const auto* type = dsp::catalogue::find (effectId))
                 EffectDialog::show (*workspace, context->presets, *type, mainWindow.get());
         }
@@ -271,6 +281,19 @@ namespace mxj
                 return;
             }
 
+            // Phase 4: File > New Audio File without the dialog.
+            workspace->newFile (44100.0, 1);
+            const auto* created = workspace->getDocument();
+            if (created == nullptr || ! created->isReady() || created->getNumChannels() != 1
+                || ! juce::approximatelyEqual (created->getSampleRate(), 44100.0) || created->isModified())
+            {
+                Log::error ("Smoke test failed: New Audio File");
+                setApplicationReturnValue (1);
+                quit();
+                return;
+            }
+
+            Log::info ("Smoke test: new file OK");
             Log::info ("Smoke test passed");
             quit();
         }
@@ -340,7 +363,62 @@ namespace mxj
                     }
 
                     Log::info ("Smoke test: effects OK");
-                    smokeTestExport (length);
+                    smokeTestRepair (length);
+                });
+            });
+        }
+
+        /** Phase 4: spectral healing of a band, noise print and noise reduction,
+            click removal, each undone again. */
+        void smokeTestRepair (juce::int64 length)
+        {
+            const auto second = (juce::int64) workspace->getDocument()->getSampleRate();
+            workspace->setSpectralSelection ({ second, juce::jmin (length, 2 * second) }, { 1000.0, 4000.0 });
+            const bool bandOk = workspace->hasSpectralSelection();
+            workspace->healSelection();
+
+            smokeTestWhenIdle ([this, length, second, bandOk]
+            {
+                auto* d = workspace->getDocument();
+                const bool healOk = bandOk && d->getAudio().getNumFrames() == length && d->isModified()
+                                 && workspace->hasSpectralSelection(); // the spectral selection stays
+
+                workspace->setSelection ({ 0, juce::jmin (length, second / 2) });
+                workspace->captureNoisePrint();
+
+                smokeTestWhenIdle ([this, length, second, healOk]
+                {
+                    const bool printOk = workspace->hasNoisePrint();
+                    workspace->setSelection ({ second, juce::jmin (length, 3 * second) });
+                    workspace->applyEffect (dsp::EffectSettings::defaultsFor ("noiseReduction"));
+
+                    smokeTestWhenIdle ([this, length, healOk, printOk]
+                    {
+                        workspace->applyEffect (dsp::EffectSettings::defaultsFor ("clickRemoval"));
+
+                        smokeTestWhenIdle ([this, length, healOk, printOk]
+                        {
+                            auto* d2 = workspace->getDocument();
+                            const bool lengthOk = d2->getAudio().getNumFrames() == length;
+                            for (int i = 0; i < 3; ++i)
+                                context->commands.perform ("edit.undo");
+                            const bool undoOk = ! d2->isModified();
+
+                            if (! healOk || ! printOk || ! lengthOk || ! undoOk)
+                            {
+                                Log::error ("Smoke test failed: heal " + juce::String (healOk ? "ok" : "wrong")
+                                            + ", noise print " + juce::String (printOk ? "ok" : "wrong")
+                                            + ", length " + juce::String (lengthOk ? "ok" : "wrong")
+                                            + ", undo " + juce::String (undoOk ? "ok" : "wrong"));
+                                setApplicationReturnValue (1);
+                                quit();
+                                return;
+                            }
+
+                            Log::info ("Smoke test: repair OK");
+                            smokeTestExport (length);
+                        });
+                    });
                 });
             });
         }

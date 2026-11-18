@@ -2,6 +2,7 @@
 #include "app/editor/WaveformView.h"
 #include "app/theme/Fonts.h"
 #include "app/theme/Palette.h"
+#include "services/settings/SettingKeys.h"
 
 namespace mxj
 {
@@ -12,6 +13,8 @@ namespace mxj
                                         1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 18000, 36000 };
         constexpr int minPixelsPerLabel = 90;
         constexpr int laneGap = 1;
+        constexpr int spectralGap = 4;
+        constexpr float waveformShare = 0.35f; ///< part of the height for the waveform when the spectrogram shows
 
         juce::String formatRulerTime (double seconds, double step)
         {
@@ -77,9 +80,10 @@ namespace mxj
         return fonts::scaled (24);
     }
 
-    WaveformView::WaveformView (Workspace& w, const CommandRegistry& c, RunCommand r)
-        : workspace (w), commands (c), run (std::move (r)), playhead (std::make_unique<Playhead>())
+    WaveformView::WaveformView (Workspace& w, const CommandRegistry& c, RunCommand r, Settings& s)
+        : workspace (w), commands (c), run (std::move (r)), playhead (std::make_unique<Playhead>()), settings (s)
     {
+        spectrogram.onPictureChanged = [this] { repaint (getSpectralArea()); };
         setOpaque (true);
         addAndMakeVisible (*playhead);
         workspace.addChangeListener (this);
@@ -141,6 +145,75 @@ namespace mxj
         return getLocalBounds().withTrimmedTop (rulerHeight());
     }
 
+    bool WaveformView::isSpectralShown() const
+    {
+        return settings.getBool (keys::showSpectral) && workspace.hasDocument();
+    }
+
+    juce::Rectangle<int> WaveformView::getWaveformArea() const
+    {
+        auto lanes = getLanesArea();
+        return isSpectralShown() ? lanes.removeFromTop (juce::roundToInt ((float) lanes.getHeight() * waveformShare)) : lanes;
+    }
+
+    juce::Rectangle<int> WaveformView::getSpectralArea() const
+    {
+        if (! isSpectralShown())
+            return {};
+
+        auto lanes = getLanesArea();
+        lanes.removeFromTop (juce::roundToInt ((float) lanes.getHeight() * waveformShare) + spectralGap);
+        return lanes;
+    }
+
+    std::vector<juce::Rectangle<int>> WaveformView::splitIntoLanes (juce::Rectangle<int> area) const
+    {
+        const auto* doc = workspace.getDocument();
+        const int channels = doc != nullptr ? juce::jmax (1, doc->getNumChannels()) : 1;
+        const int laneHeight = (area.getHeight() - laneGap * (channels - 1)) / channels;
+
+        std::vector<juce::Rectangle<int>> lanes;
+        for (int c = 0; c < channels; ++c)
+        {
+            lanes.push_back (area.removeFromTop (laneHeight));
+            area.removeFromTop (laneGap);
+        }
+
+        return lanes;
+    }
+
+    dsp::FrequencyScale WaveformView::getFrequencyScale() const
+    {
+        const auto* doc = workspace.getDocument();
+        return { dsp::FrequencyScale::fromName (settings.getString (keys::spectralScale)),
+                 doc != nullptr ? doc->getSampleRate() * 0.5 : 24000.0 };
+    }
+
+    double WaveformView::hzAt (juce::Rectangle<int> lane, int y) const
+    {
+        const auto p = 1.0 - (double) (juce::jlimit (lane.getY(), lane.getBottom(), y) - lane.getY()) / juce::jmax (1, lane.getHeight());
+        return getFrequencyScale().fromProportion (p);
+    }
+
+    float WaveformView::yForHz (juce::Rectangle<int> lane, double hz) const
+    {
+        return (float) lane.getY() + (float) ((1.0 - getFrequencyScale().toProportion (hz)) * lane.getHeight());
+    }
+
+    int WaveformView::spectralLaneAt (juce::Point<int> p) const
+    {
+        const auto area = getSpectralArea();
+        if (! area.contains (p))
+            return -1;
+
+        const auto lanes = splitIntoLanes (area);
+        for (size_t i = 0; i < lanes.size(); ++i)
+            if (lanes[i].contains (p))
+                return (int) i;
+
+        return -1;
+    }
+
     //==============================================================================
     void WaveformView::paint (juce::Graphics& g)
     {
@@ -157,17 +230,22 @@ namespace mxj
         if (doc == nullptr)
             return;
 
-        const int channels = doc->getNumChannels();
-        auto lanes = getLanesArea();
-        const int laneHeight = (lanes.getHeight() - laneGap * (channels - 1)) / juce::jmax (1, channels);
+        const auto lanes = splitIntoLanes (getWaveformArea());
+        for (int c = 0; c < (int) lanes.size(); ++c)
+            if (lanes[(size_t) c].intersects (clip))
+                paintLane (g, lanes[(size_t) c], c, clipLeft, clipRight);
 
-        for (int c = 0; c < channels; ++c)
+        if (isSpectralShown())
         {
-            auto lane = lanes.removeFromTop (laneHeight);
-            lanes.removeFromTop (laneGap);
-
-            if (lane.intersects (clip))
-                paintLane (g, lane, c, clipLeft, clipRight);
+            const auto area = getSpectralArea();
+            g.setColour (palette::line);
+            g.fillRect (area.getX(), area.getY() - spectralGap, area.getWidth(), spectralGap);
+            if (area.intersects (clip))
+                paintSpectral (g, clipLeft, clipRight);
+        }
+        else
+        {
+            spectrogram.clear();
         }
 
         paintSelection (g);
@@ -374,12 +452,147 @@ namespace mxj
         if (right < 0.0f || left > (float) getWidth())
             return;
 
-        const auto area = juce::Rectangle<float> (left, 0.0f, juce::jmax (1.0f, right - left), (float) getHeight());
-        g.setColour (palette::selection);
-        g.fillRect (area);
-        g.setColour (palette::playhead.withAlpha (0.7f));
-        g.fillRect (area.withWidth (1.0f));
-        g.fillRect (area.withX (area.getRight() - 1.0f).withWidth (1.0f));
+        auto drawRange = [&] (juce::Rectangle<float> area, juce::Colour fill, juce::Colour edge)
+        {
+            g.setColour (fill);
+            g.fillRect (area);
+            g.setColour (edge);
+            g.fillRect (area.withWidth (1.0f));
+            g.fillRect (area.withX (area.getRight() - 1.0f).withWidth (1.0f));
+        };
+
+        const auto band = workspace.getSelectedBand();
+        if (band.isEmpty() || ! isSpectralShown())
+        {
+            drawRange (juce::Rectangle<float> (left, 0.0f, juce::jmax (1.0f, right - left), (float) getHeight()),
+                       palette::selection, palette::playhead.withAlpha (0.7f));
+            return;
+        }
+
+        // Spectral selection: the time range lightly in the waveform, a rectangle in each spectrogram lane.
+        const auto wave = getWaveformArea().toFloat();
+        drawRange (juce::Rectangle<float> (left, 0.0f, juce::jmax (1.0f, right - left), wave.getBottom()),
+                   palette::selection.withMultipliedAlpha (0.5f), palette::playhead.withAlpha (0.4f));
+
+        for (const auto& lane : splitIntoLanes (getSpectralArea()))
+        {
+            const auto top = yForHz (lane, band.getEnd()), bottom = yForHz (lane, band.getStart());
+            const auto box = juce::Rectangle<float> (left, top, juce::jmax (1.0f, right - left), juce::jmax (1.0f, bottom - top));
+            g.setColour (palette::spectrogram::selectionFill);
+            g.fillRect (box);
+            g.setColour (palette::spectrogram::selectionLine);
+            g.drawRect (box, 1.5f);
+        }
+    }
+
+    void WaveformView::requestSpectrogram()
+    {
+        const auto* doc = workspace.getDocument();
+        if (doc == nullptr || ! doc->isReady() || ! isSpectralShown())
+            return;
+
+        const auto lanes = splitIntoLanes (getSpectralArea());
+        if (lanes.empty() || lanes.front().getHeight() <= 0)
+            return;
+
+        SpectrogramRenderer::Request r;
+        r.audio = doc->getAudio();
+        r.startFrame = workspace.getView().startFrame;
+        r.framesPerPixel = workspace.getView().framesPerPixel;
+        r.width = getWidth();
+        r.height = lanes.front().getHeight();
+        r.fftSize = juce::jlimit (256, 16384, (int) settings.get (keys::spectralResolution));
+        r.scale = dsp::FrequencyScale::fromName (settings.getString (keys::spectralScale));
+        r.colours = settings.getString (keys::spectralColours);
+        spectrogram.request (r);
+    }
+
+    void WaveformView::paintSpectral (juce::Graphics& g, int clipLeft, int clipRight)
+    {
+        const auto* doc = workspace.getDocument();
+        requestSpectrogram();
+
+        const auto lanes = splitIntoLanes (getSpectralArea());
+        const auto* complete = spectrogram.getCompletePicture();
+        const auto* newest = spectrogram.getPicture();
+
+        for (int c = 0; c < (int) lanes.size(); ++c)
+        {
+            const auto& lane = lanes[(size_t) c];
+            g.setColour (SpectrogramRenderer::colourFor (settings.getString (keys::spectralColours), 0.0f));
+            g.fillRect (lane.withLeft (clipLeft).withRight (clipRight));
+
+            if (doc->isReady())
+            {
+                if (complete != nullptr)
+                    paintPicture (g, *complete, c, lane, false);
+                if (newest != nullptr && newest != complete && ! newest->isComplete())
+                    paintPicture (g, *newest, c, lane, true);
+            }
+
+            // End of file.
+            const auto endX = frameToX ((double) doc->getLength());
+            if (endX < (float) clipRight)
+            {
+                g.setColour (palette::background);
+                g.fillRect (juce::Rectangle<float> (endX, (float) lane.getY(), (float) clipRight - endX, (float) lane.getHeight()));
+            }
+
+            if (clipLeft < 80)
+                paintFrequencyLabels (g, lane);
+        }
+    }
+
+    void WaveformView::paintPicture (juce::Graphics& g, const SpectrogramRenderer::Picture& picture, int channel,
+                                     juce::Rectangle<int> lane, bool partial)
+    {
+        if (channel >= (int) picture.channels.size() || picture.request.height <= 0)
+            return;
+
+        const auto& v = workspace.getView();
+        const auto& req = picture.request;
+        const auto sx = req.framesPerPixel / v.framesPerPixel;
+        const auto tx = (req.startFrame - v.startFrame) / v.framesPerPixel;
+        const auto sy = (double) lane.getHeight() / req.height;
+
+        juce::Graphics::ScopedSaveState save (g);
+        auto clip = lane;
+        if (partial)
+            clip = clip.withRight (juce::jmin (lane.getRight(), lane.getX() + (int) std::floor (tx + picture.columnsDone * sx)));
+        g.reduceClipRegion (clip);
+        g.setImageResamplingQuality (juce::Graphics::lowResamplingQuality);
+        g.drawImageTransformed (picture.channels[(size_t) channel],
+                                juce::AffineTransform::scale ((float) sx, (float) sy)
+                                    .translated ((float) (lane.getX() + tx), (float) lane.getY()));
+    }
+
+    void WaveformView::paintFrequencyLabels (juce::Graphics& g, juce::Rectangle<int> lane)
+    {
+        static const double candidates[] { 50, 100, 200, 500, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 12000,
+                                           15000, 16000, 20000, 24000, 30000, 40000, 48000, 60000, 80000, 96000 };
+        const auto nyquist = getFrequencyScale().nyquist;
+        g.setFont (fonts::mono (10.0f));
+        float lastY = 1.0e9f;
+
+        for (auto hz : candidates)
+        {
+            if (hz >= nyquist)
+                break;
+
+            const auto y = yForHz (lane, hz);
+            if (lastY - y < 16.0f || y < (float) lane.getY() + 6.0f)
+                continue;
+
+            lastY = y;
+            const auto text = hz >= 1000.0 ? juce::String (hz / 1000.0, hz < 10000.0 && std::fmod (hz, 1000.0) != 0.0 ? 1 : 0) + "k"
+                                           : juce::String ((int) hz);
+            g.setColour (palette::background.withAlpha (0.6f));
+            g.fillRect (juce::Rectangle<float> ((float) lane.getX(), y - 6.0f, 34.0f, 12.0f));
+            g.setColour (palette::text.withAlpha (0.8f));
+            g.fillRect (juce::Rectangle<float> ((float) lane.getX(), y, 4.0f, 1.0f));
+            g.drawText (text, juce::Rectangle<float> ((float) lane.getX() + 6.0f, y - 6.0f, 30.0f, 12.0f),
+                        juce::Justification::centredLeft, false);
+        }
     }
 
     void WaveformView::paintMarkers (juce::Graphics& g, int clipLeft, int clipRight)
@@ -449,6 +662,12 @@ namespace mxj
             return;
         }
 
+        if (spectralLaneAt (e.getPosition()) >= 0)
+        {
+            setMouseCursor (juce::MouseCursor::CrosshairCursor);
+            return;
+        }
+
         // Near an edge of the selection: it can be dragged.
         const auto sel = workspace.getSelection();
         const bool nearEdge = ! sel.isEmpty()
@@ -489,6 +708,17 @@ namespace mxj
         const auto frame = frameAt (e.x);
         const auto sel = workspace.getSelection();
 
+        // In the spectrogram: drag a rectangle (time and frequency).
+        if (const auto lane = spectralLaneAt (e.getPosition()); lane >= 0 && ! e.mods.isShiftDown())
+        {
+            drag = Drag::spectral;
+            dragAnchor = frame;
+            dragLane = splitIntoLanes (getSpectralArea())[(size_t) lane];
+            dragAnchorHz = hzAt (dragLane, e.y);
+            workspace.setCursor (frame);
+            return;
+        }
+
         if (e.mods.isShiftDown())
         {
             // Extend the selection (or select from the cursor) to the click.
@@ -520,7 +750,7 @@ namespace mxj
 
     void WaveformView::mouseDrag (const juce::MouseEvent& e)
     {
-        if (drag != Drag::select || ! workspace.isReady() || e.getDistanceFromDragStart() < 3)
+        if ((drag != Drag::select && drag != Drag::spectral) || ! workspace.isReady() || e.getDistanceFromDragStart() < 3)
             return;
 
         // Dragging past an edge scrolls the view.
@@ -532,7 +762,16 @@ namespace mxj
         }
 
         const auto frame = frameAt (juce::jlimit (0, getWidth(), e.x));
-        workspace.setSelection ({ juce::jmin (dragAnchor, frame), juce::jmax (dragAnchor, frame) });
+        const FrameRange range { juce::jmin (dragAnchor, frame), juce::jmax (dragAnchor, frame) };
+
+        if (drag == Drag::spectral)
+        {
+            const auto hz = hzAt (dragLane, e.y);
+            workspace.setSpectralSelection (range, { juce::jmin (dragAnchorHz, hz), juce::jmax (dragAnchorHz, hz) });
+            return;
+        }
+
+        workspace.setSelection (range);
     }
 
     void WaveformView::mouseUp (const juce::MouseEvent&)
@@ -581,6 +820,9 @@ namespace mxj
             add (id);
         menu.addSeparator();
         for (const auto* id : { "markers.add", "markers.rename", "markers.delete" })
+            add (id);
+        menu.addSeparator();
+        for (const auto* id : { "spectral.heal", "spectral.changeLevel", "spectral.deleteBand", "repair.captureNoisePrint" })
             add (id);
 
         menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());

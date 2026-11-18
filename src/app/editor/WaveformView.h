@@ -2,7 +2,9 @@
 #pragma once
 
 #include "app/Workspace.h"
+#include "app/editor/SpectrogramRenderer.h"
 #include "core/commands/CommandRegistry.h"
+#include "services/settings/Settings.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -19,6 +21,10 @@ namespace mxj
         the selection, dragging an edge of it moves that edge), clicking a marker
         in the ruler jumps to it, right click opens the edit menu, wheel scrolls,
         Ctrl + wheel zooms around the mouse.
+
+        Phase 4: with View > Spectral Frequency Display the lower part shows the
+        spectrogram of each channel. Dragging there selects a rectangle: a time
+        range and a frequency band (spectral selection).
     */
     class WaveformView : public juce::Component,
                          private juce::ChangeListener,
@@ -27,7 +33,7 @@ namespace mxj
     public:
         using RunCommand = std::function<void (const CommandId&)>;
 
-        WaveformView (Workspace& workspace, const CommandRegistry& commands, RunCommand runCommand);
+        WaveformView (Workspace& workspace, const CommandRegistry& commands, RunCommand runCommand, Settings& settings);
         ~WaveformView() override;
 
         void paint (juce::Graphics&) override;
@@ -54,6 +60,10 @@ namespace mxj
         void paintPeaks (juce::Graphics&, juce::Rectangle<int> lane, int channel, int clipLeft, int clipRight);
         void paintSamples (juce::Graphics&, juce::Rectangle<int> lane, int channel, int clipLeft, int clipRight);
         void paintSelection (juce::Graphics&);
+        void paintSpectral (juce::Graphics&, int clipLeft, int clipRight);
+        void paintPicture (juce::Graphics&, const SpectrogramRenderer::Picture&, int channel, juce::Rectangle<int> lane, bool partial);
+        void paintFrequencyLabels (juce::Graphics&, juce::Rectangle<int> lane);
+        void requestSpectrogram();
         void paintMarkers (juce::Graphics&, int clipLeft, int clipRight);
 
         /** Index of the marker whose flag is under x in the ruler, or -1. */
@@ -62,6 +72,14 @@ namespace mxj
         juce::int64 frameAt (int x) const;
 
         juce::Rectangle<int> getLanesArea() const;
+        juce::Rectangle<int> getWaveformArea() const;
+        juce::Rectangle<int> getSpectralArea() const;
+        std::vector<juce::Rectangle<int>> splitIntoLanes (juce::Rectangle<int> area) const;
+        bool isSpectralShown() const;
+        dsp::FrequencyScale getFrequencyScale() const;
+        double hzAt (juce::Rectangle<int> lane, int y) const;
+        float yForHz (juce::Rectangle<int> lane, double hz) const;
+        int spectralLaneAt (juce::Point<int> p) const;
         double xToFrame (float x) const;
         float frameToX (double frame) const;
         void updatePlayhead();
@@ -71,9 +89,13 @@ namespace mxj
         RunCommand run;
         std::unique_ptr<Playhead> playhead;
 
-        enum class Drag { none, select, startEdge, endEdge };
+        enum class Drag { none, select, startEdge, endEdge, spectral };
         Drag drag = Drag::none;
         juce::int64 dragAnchor = 0;
+        double dragAnchorHz = 0.0;
+        juce::Rectangle<int> dragLane;
+        Settings& settings;
+        SpectrogramRenderer spectrogram;
         juce::AudioBuffer<float> sampleBuffer; ///< samples read for close zoom levels
         bool wasLoading = false;
 

@@ -6,16 +6,18 @@
 
 ---
 
-**Status: version 0.2 (phase 2, editing and recording).** Opens WAV, AIFF, FLAC, MP3, Ogg Vorbis and Opus,
-records from the microphone, edits without touching the original audio (cut, copy, paste, mix paste, trim,
-silence, fades, markers, unlimited undo), saves and exports to WAV, AIFF, FLAC, Ogg Vorbis and Opus,
-and restores your work after a crash. Effects arrive in 0.3.
-See the [roadmap](docs/master-plan.md).
+**Status: version 0.4 (phase 4, spectral view and repair).** Opens WAV, AIFF, FLAC, MP3, Ogg Vorbis and Opus,
+creates new empty files, records from the microphone, edits without touching the original audio (cut, copy,
+paste, trim, fades, markers, unlimited undo), has 24 effects with live preview and an effect rack, measures
+loudness (LUFS), shows a spectrogram where you can select and heal frequencies, and removes background noise,
+hum, clicks and clipping. Saves and exports to WAV, AIFF, FLAC, Ogg Vorbis and Opus, and restores your work
+after a crash. See the [roadmap](docs/master-plan.md).
 
-**Durum: Sürüm 0.2 (Faz 2, düzenleme ve kayıt).** WAV, AIFF, FLAC, MP3, Ogg Vorbis ve Opus açar, mikrofondan
-kayıt yapar, orijinal sese dokunmadan düzenler (kes, kopyala, yapıştır, karıştırarak yapıştır, kırp, sessizleştir,
-fade, işaretçiler, sınırsız geri alma), WAV, AIFF, FLAC, Ogg Vorbis ve Opus olarak kaydeder ve çökmeden sonra
-çalışmanı geri getirir. Efektler 0.3 sürümünde geliyor.
+**Durum: Sürüm 0.4 (Faz 4, spektral görünüm ve onarım).** WAV, AIFF, FLAC, MP3, Ogg Vorbis ve Opus açar, yeni boş
+dosya oluşturur, mikrofondan kayıt yapar, orijinal sese dokunmadan düzenler, canlı dinlemeli 24 efekti ve efekt rafı
+vardır, ses yüksekliğini (LUFS) ölçer, frekansları seçip iyileştirebileceğin bir spektrogram gösterir; dip gürültüsü,
+uğultu, tık ve kırpılmayı temizler. WAV, AIFF, FLAC, Ogg Vorbis ve Opus olarak kaydeder ve çökmeden sonra
+çalışmanı geri getirir.
 
 ## Goals / Hedefler
 

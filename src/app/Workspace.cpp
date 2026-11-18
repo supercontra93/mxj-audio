@@ -2,9 +2,12 @@
 #include "app/Workspace.h"
 #include "app/document/RecoveryJournal.h"
 #include "app/editor/ExportDialog.h"
+#include "app/editor/NewFileDialog.h"
 #include "app/ui/Dialogs.h"
 #include "dsp/convert/Resample.h"
 #include "dsp/process/Render.h"
+#include "dsp/repair/NoiseReduction.h"
+#include "dsp/repair/Restoration.h"
 #include "formats/import/FileSampleSource.h"
 #include "services/logging/Log.h"
 #include "services/settings/SettingKeys.h"
@@ -166,6 +169,7 @@ namespace mxj
         document = std::move (newDocument);
         cursor = 0;
         selection = {};
+        band = {};
         selectedMarker = -1;
         view = {};
         journalDirty = true;
@@ -221,6 +225,47 @@ namespace mxj
             showError (TRANS ("Could not open the file"), document->getDisplayName() + "\n\n" + document->getError());
         }
 
+        sendChangeMessage();
+    }
+
+    void Workspace::showNewFileDialog()
+    {
+        askToSaveChanges ([weak = juce::WeakReference<Workspace> (this)]
+        {
+            if (weak == nullptr)
+                return;
+
+            NewFileDialog::show (weak->context.settings, juce::TopLevelWindow::getActiveTopLevelWindow(),
+                                 [weak] (double sampleRate, int numChannels)
+            {
+                if (weak != nullptr)
+                    weak->newFile (sampleRate, numChannels);
+            });
+        });
+    }
+
+    void Workspace::newFile (double sampleRate, int numChannels)
+    {
+        if (isBusy() || recording || sampleRate <= 0.0 || numChannels <= 0)
+            return;
+
+        if (document != nullptr && document->isModified())
+        {
+            askToSaveChanges ([this, sampleRate, numChannels] { newFileNow (sampleRate, numChannels); });
+            return;
+        }
+
+        newFileNow (sampleRate, numChannels);
+    }
+
+    void Workspace::newFileNow (double sampleRate, int numChannels)
+    {
+        const auto name = TRANS ("Untitled") + " " + juce::String (++newFileCount);
+        Log::info ("New file: " + juce::String (numChannels) + " ch, " + juce::String (sampleRate) + " Hz");
+        setDocument (AudioDocument::createEmpty (name, numChannels, sampleRate));
+        zoomToFit();
+        setStatus (TRANS ("New file") + ": " + name + " (" + juce::String (juce::roundToInt (sampleRate)) + " Hz, "
+                   + (numChannels == 1 ? TRANS ("Mono") : TRANS ("Stereo")) + ")");
         sendChangeMessage();
     }
 
@@ -475,6 +520,7 @@ namespace mxj
 
         cursor = juce::jlimit ((juce::int64) 0, document->getLength(), frame);
         selection = { cursor, cursor };
+        band = {};
 
         if (isPlaying())
             play();
@@ -519,6 +565,7 @@ namespace mxj
         const bool restart = isPlaying();
         stop();
         selection = range;
+        band = {};
         cursor = range.getStart();
 
         if (restart && hasSelection())
@@ -569,17 +616,25 @@ namespace mxj
         if (audioChanged)
             stop();
 
+        const bool wasEmpty = document->getAudio().isEmpty();
         document->setAudioState (state, revision);
 
         if (audioChanged)
             context.audio.getPlayback().setSequence (state.audio);
 
-        selection = newSelection.getIntersectionWith ({ 0, state.audio.getNumFrames() });
+        const auto newRange = newSelection.getIntersectionWith ({ 0, state.audio.getNumFrames() });
+        if (newRange != selection)
+            band = {}; // a frequency band only stays with the same time selection
+        selection = newRange;
         cursor = selection.getStart();
         if (selectedMarker >= (int) state.markers.size())
             selectedMarker = -1;
 
-        setView (view); // the length may have changed
+        if (wasEmpty && ! state.audio.isEmpty())
+            zoomToFit(); // the first audio in a new file
+        else
+            setView (view); // the length may have changed
+
         journalDirty = true;
         sendChangeMessage();
     }
@@ -671,6 +726,12 @@ namespace mxj
 
     void Workspace::deleteSelection()
     {
+        if (hasSpectralSelection())
+        {
+            deleteSelectedFrequencies();
+            return;
+        }
+
         if (canEdit() && hasSelection())
             applyEdit (TRANS ("Delete"), edits::erase (document->getAudioState(), selection));
     }
@@ -683,6 +744,12 @@ namespace mxj
 
     void Workspace::silenceSelection()
     {
+        if (hasSpectralSelection())
+        {
+            deleteSelectedFrequencies();
+            return;
+        }
+
         if (canEdit() && hasSelection())
             applyEdit (TRANS ("Silence"), edits::silence (document->getAudioState(), selection));
     }
@@ -1056,25 +1123,48 @@ namespace mxj
 
     void Workspace::processRange (const juce::String& name, FrameRange range,
                                   std::function<AudioSequence (const AudioSequence&, BlockStore&, BackgroundJob&)> make,
-                                  std::function<void()> afterApplied)
+                                  std::function<void()> afterApplied, bool mayUseBand)
     {
         if (! canEdit() || range.isEmpty())
             return;
 
-        auto input = document->getAudio().getRange (range.getStart(), range.getLength());
+        const auto& audio = document->getAudio();
         auto result = std::make_shared<AudioSequence>();
         auto& store = context.blocks();
 
-        runJob (name, [input, result, &store, make] (BackgroundJob& j)
+        // A frequency band is selected: process a little more than the selection,
+        // then keep the processed sound inside the band only (master plan, module F).
+        const bool useBand = mayUseBand && hasSpectralSelection() && range == selection;
+        const dsp::SpectralRegion region { range, band.getStart(), band.getEnd() };
+        const auto editRange = useBand ? dsp::spectral::editRange (audio, range) : range;
+        auto input = audio.getRange (editRange.getStart(), editRange.getLength());
+        const auto keepSelection = selection;
+
+        runJob (name, [input, result, &store, make, useBand, audio, region, editRange] (BackgroundJob& j)
         {
             *result = make (input, store, j);
+
+            if (useBand && result->getNumChannels() > 0 && j.shouldContinue())
+            {
+                if (result->getNumFrames() != editRange.getLength())
+                {
+                    j.error = TRANS ("This effect changes the length of the audio, so it cannot work on a frequency band.");
+                    *result = {};
+                    return false;
+                }
+
+                auto processed = audio;
+                processed.replace (editRange.getStart(), editRange.getLength(), *result);
+                *result = dsp::spectral::blend (audio, processed, region, store,
+                                                { [&j] { return j.shouldContinue(); }, &j.progress, 0.5, 1.0 });
+            }
 
             if (result->getNumChannels() == 0 && j.error.isEmpty() && j.shouldContinue())
                 j.error = TRANS ("The audio could not be written. Is the disk full?");
 
             return result->getNumChannels() > 0;
         },
-        [this, name, range, result, afterApplied] (bool ok)
+        [this, name, editRange, result, afterApplied, useBand, keepSelection] (bool ok)
         {
             if (! ok || document == nullptr)
             {
@@ -1083,11 +1173,157 @@ namespace mxj
                 return;
             }
 
-            applyEdit (name, edits::replaceRange (document->getAudioState(), range, *result));
+            auto edit = edits::replaceRange (document->getAudioState(), editRange, *result);
+            if (useBand)
+                edit.selection = keepSelection; // the spectral selection stays
+            applyEdit (name, edit);
 
             if (afterApplied != nullptr)
                 afterApplied();
         });
+    }
+
+    void Workspace::applySpectral (const juce::String& name,
+                                   std::function<AudioSequence (const AudioSequence&, const dsp::SpectralRegion&, BlockStore&,
+                                                                const dsp::WorkControl&)> edit)
+    {
+        if (! canEdit() || ! hasSelection())
+            return;
+
+        const auto audio = document->getAudio();
+        const dsp::SpectralRegion region { selection, band.getStart(), band.getEnd() };
+        const auto editRange = dsp::spectral::editRange (audio, selection);
+        const auto keepSelection = selection;
+        auto result = std::make_shared<AudioSequence>();
+        auto& store = context.blocks();
+
+        runJob (name, [audio, region, result, &store, edit] (BackgroundJob& j)
+        {
+            *result = edit (audio, region, store, { [&j] { return j.shouldContinue(); }, &j.progress });
+
+            if (result->getNumChannels() == 0 && j.error.isEmpty() && j.shouldContinue())
+                j.error = TRANS ("The audio could not be written. Is the disk full?");
+
+            return result->getNumChannels() > 0;
+        },
+        [this, name, editRange, result, keepSelection] (bool ok)
+        {
+            if (! ok || document == nullptr)
+            {
+                if (jobError.isNotEmpty())
+                    showError (name, jobError);
+                return;
+            }
+
+            auto e = edits::replaceRange (document->getAudioState(), editRange, *result);
+            e.selection = keepSelection;
+            applyEdit (name, e);
+        });
+    }
+
+    void Workspace::setSpectralSelection (FrameRange range, juce::Range<double> bandHz)
+    {
+        setSelection (range);
+        if (hasSelection() && document != nullptr)
+        {
+            const auto nyquist = document->getSampleRate() * 0.5;
+            bandHz = bandHz.getIntersectionWith ({ 0.0, nyquist });
+            // A band that covers (nearly) everything is a plain time selection.
+            band = (bandHz.getLength() >= nyquist * 0.999) ? juce::Range<double>() : bandHz;
+            sendChangeMessage();
+        }
+    }
+
+    void Workspace::healSelection()
+    {
+        if (! canEdit() || ! hasSelection())
+            return;
+
+        applySpectral (TRANS ("Heal"), [] (const AudioSequence& audio, const dsp::SpectralRegion& region, BlockStore& store,
+                                           const dsp::WorkControl& control)
+        {
+            return dsp::spectral::heal (audio, region, store, control);
+        });
+    }
+
+    void Workspace::changeSelectionLevel (float gainDb)
+    {
+        if (! canEdit() || ! hasSelection())
+            return;
+
+        const auto name = gainDb <= -100.0f ? TRANS ("Delete Frequencies") : TRANS ("Change Level");
+        applySpectral (name, [gainDb] (const AudioSequence& audio, const dsp::SpectralRegion& region, BlockStore& store,
+                                       const dsp::WorkControl& control)
+        {
+            return dsp::spectral::changeGain (audio, region, gainDb, store, control);
+        });
+    }
+
+    void Workspace::showChangeLevelDialog()
+    {
+        if (! canEdit() || ! hasSelection())
+            return;
+
+        const auto what = hasSpectralSelection() ? TRANS ("Raise or lower the selected frequencies by (dB, minus = lower):")
+                                                 : TRANS ("Raise or lower the selection by (dB, minus = lower):");
+        dialogs::askForText (TRANS ("Change Level"), what, "-12",
+                             [weak = juce::WeakReference<Workspace> (this)] (const juce::String& text)
+        {
+            if (weak == nullptr)
+                return;
+
+            const auto value = text.trim().replaceCharacter (',', '.').getFloatValue();
+            if (! text.trim().containsAnyOf ("0123456789") || std::abs (value) > 100.0f)
+            {
+                dialogs::showWarning (TRANS ("Change Level"), TRANS ("Please type a number between -100 and 100."));
+                return;
+            }
+
+            weak->changeSelectionLevel (value);
+        });
+    }
+
+    void Workspace::deleteSelectedFrequencies()
+    {
+        changeSelectionLevel (-200.0f);
+    }
+
+    void Workspace::captureNoisePrint()
+    {
+        if (! canEdit() || ! hasSelection())
+            return;
+
+        const auto range = selection;
+        if (range.getLength() < (juce::int64) (document->getSampleRate() * 0.1))
+        {
+            dialogs::showWarning (TRANS ("Capture Noise Print"), TRANS ("Select at least a tenth of a second that holds only the background noise."));
+            return;
+        }
+
+        auto input = document->getAudio().getRange (range.getStart(), range.getLength());
+        auto profile = std::make_shared<dsp::NoiseProfile>();
+
+        runJob (TRANS ("Capture Noise Print"), [input, profile] (BackgroundJob& j)
+        {
+            *profile = dsp::NoiseProfile::capture (input, { [&j] { return j.shouldContinue(); }, &j.progress });
+            return profile->isValid();
+        },
+        [this, profile] (bool ok)
+        {
+            if (! ok)
+                return;
+
+            dsp::noisePrint::set (profile);
+            Log::info ("Noise print captured: " + juce::String (profile->seconds, 2) + " s");
+            setStatus (TRANS ("Noise print captured") + " (" + juce::String (profile->seconds, 1) + " s). "
+                       + TRANS ("Now select the part to clean and choose Noise Reduction."));
+        });
+    }
+
+    bool Workspace::hasNoisePrint() const
+    {
+        const auto p = dsp::noisePrint::get();
+        return p != nullptr && p->isValid();
     }
 
     void Workspace::applyEffect (const dsp::EffectSettings& settings)
@@ -1184,6 +1420,30 @@ namespace mxj
             processRange (name, range, [percent, control] (const AudioSequence& input, BlockStore& store, BackgroundJob& j)
             {
                 return dsp::changeSpeed (input, percent, store, control (j));
+            }, nullptr, false);
+            return;
+        }
+
+        if (type->id == "clickRemoval" || type->id == "clipRepair")
+        {
+            const bool clicks = type->id == "clickRemoval";
+            const auto a = settings.values[0];
+            const bool b = settings.values.size() > 1 && settings.values[1] > 0.5f;
+            const auto c = settings.values.size() > 1 ? settings.values[1] : 2.0f;
+            auto report = std::make_shared<dsp::restore::Report>();
+
+            processRange (name, range, [=] (const AudioSequence& input, BlockStore& store, BackgroundJob& j)
+            {
+                return clicks ? dsp::restore::removeClicks (input, a, c, store, control (j), report.get())
+                              : dsp::restore::repairClipping (input, a, b, store, control (j), report.get());
+            },
+            [this, report, clicks]
+            {
+                auto message = (clicks ? TRANS ("Clicks removed") : TRANS ("Clipped peaks repaired")) + ": " + juce::String (report->repaired);
+                if (std::abs (report->gainDb) > 0.01f)
+                    message << "  (" << TRANS ("level") << " " << juce::String (report->gainDb, 1) << " dB)";
+                setStatus (message);
+                Log::info (message);
             });
             return;
         }
@@ -1234,7 +1494,7 @@ namespace mxj
         processRange (TRANS ("Reverse"), getEffectRange(), [] (const AudioSequence& input, BlockStore& store, BackgroundJob& j)
         {
             return dsp::reverse (input, store, { [&j] { return j.shouldContinue(); }, &j.progress });
-        });
+        }, nullptr, false);
     }
 
     void Workspace::invertAudio()

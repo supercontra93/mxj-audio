@@ -50,6 +50,9 @@ jobs:
           if (-not (Select-String -Path (Join-Path $data "logs/*.log") -Pattern "Smoke test passed" -Quiet)) {
             throw "The log does not say 'Smoke test passed'"
           }
+          if (-not (Select-String -Path (Join-Path $data "logs/*.log") -Pattern "Smoke test: new file OK" -Quiet)) {
+            throw "The log does not say a new file was created"
+          }
 
       - name: Smoke test with a 10 minute WAV (opens, loads, cuts, undoes, applies effects, exports, quits cleanly)
         shell: pwsh
@@ -68,6 +71,9 @@ jobs:
           }
           if (-not (Select-String -Path (Join-Path $data "logs/*.log") -Pattern "Smoke test: effects OK" -Quiet)) {
             throw "The log does not say the effects worked"
+          }
+          if (-not (Select-String -Path (Join-Path $data "logs/*.log") -Pattern "Smoke test: repair OK" -Quiet)) {
+            throw "The log does not say the repair tools worked"
           }
           if (-not (Select-String -Path (Join-Path $data "logs/*.log") -Pattern "Smoke test: edit and export OK" -Quiet)) {
             throw "The log does not say the edit and export worked"
@@ -111,8 +117,10 @@ jobs:
         run: |
           timeout 60 xvfb-run -a "build/src/app/MXJAudio_artefacts/Release/MXJ AUDIO" --smoke-test --data-dir "$RUNNER_TEMP/mxj-data"
           grep -q "Smoke test passed" "$RUNNER_TEMP"/mxj-data/logs/*.log
+          grep -q "Smoke test: new file OK" "$RUNNER_TEMP"/mxj-data/logs/*.log
           python3 tools/make_test_wav.py "$RUNNER_TEMP/smoke.wav" 600
           timeout 150 xvfb-run -a "build/src/app/MXJAudio_artefacts/Release/MXJ AUDIO" --smoke-test --data-dir "$RUNNER_TEMP/mxj-data-file" "$RUNNER_TEMP/smoke.wav"
           grep -q "file loaded, 28800000 frames" "$RUNNER_TEMP"/mxj-data-file/logs/*.log
           grep -q "Smoke test: effects OK" "$RUNNER_TEMP"/mxj-data-file/logs/*.log
+          grep -q "Smoke test: repair OK" "$RUNNER_TEMP"/mxj-data-file/logs/*.log
           grep -q "Smoke test: edit and export OK" "$RUNNER_TEMP"/mxj-data-file/logs/*.log

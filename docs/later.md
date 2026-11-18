@@ -21,4 +21,8 @@ Ideas that came up during a phase but are outside its scope. Reviewed at the sta
 - Loudness weighting for surround channels (today every channel counts equally, right for mono and stereo).
 - Anti-aliasing filter before Change Speed speeds up (today plain interpolation).
 - Effect dialogs that stay open while editing (non-modal) and A/B comparison of settings.
-- File > New Audio File: an empty file with a chosen sample rate and channel count (the menu entry exists but is disabled; today a new file comes from recording).
+- Spectral selection with lasso and brush (phase 4 has the rectangle); a time-only selection tool in the spectrogram.
+- Save and load noise prints; noise reduction with RNNoise as a "voice" mode (own decision record).
+- Heal: a second pass or shorter windows for very sharp onsets (a little of a cough's first click can remain).
+- Spectrogram: zoom the frequency axis, a level range setting, and a cache so scrolling back is instant.
+- Click removal and clip repair with live preview (today they work on the selection and are undone with Ctrl+Z).

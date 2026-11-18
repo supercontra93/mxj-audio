@@ -7,6 +7,7 @@
 #include "app/effects/EffectRack.h"
 #include "core/edit/EditOperations.h"
 #include "dsp/process/Analysis.h"
+#include "dsp/spectral/SpectralEdit.h"
 #include "formats/export/AudioExporter.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -39,6 +40,13 @@ namespace mxj
         /** Opens a file, replacing the current one (after asking to save unsaved
             changes). Returns false and shows a message if it cannot be opened. */
         bool openFile (const juce::File& file);
+
+        /** File > New Audio File: asks for the sample rate and channels, then
+            creates an empty file (after asking to save unsaved changes). */
+        void showNewFileDialog();
+
+        /** Creates an empty file without a name on disk (after asking to save unsaved changes). */
+        void newFile (double sampleRate, int numChannels);
 
         /** Closes the file, after asking to save unsaved changes. */
         void closeFile();
@@ -110,6 +118,33 @@ namespace mxj
         void fadeOut();
 
         bool hasClipboard() const noexcept          { return ! clipboard.isEmpty(); }
+
+        //==============================================================================
+        // Spectral selection and repair (phase 4)
+
+        /** Selects a time range and a frequency band (Hz) in the spectrogram. An
+            empty band selects all frequencies, like setSelection(). */
+        void setSpectralSelection (FrameRange range, juce::Range<double> bandHz);
+
+        /** The selected frequency band, or an empty range for all frequencies. */
+        juce::Range<double> getSelectedBand() const noexcept { return hasSelection() ? band : juce::Range<double>(); }
+
+        /** True if a frequency band is selected: effects and edits then change only that band. */
+        bool hasSpectralSelection() const noexcept  { return hasSelection() && ! band.isEmpty(); }
+
+        /** Heals the selection (or the selected band) from the sound around it. */
+        void healSelection();
+
+        /** Raises or lowers the selected band (or all frequencies of the selection). */
+        void changeSelectionLevel (float gainDb);
+        void showChangeLevelDialog();
+
+        /** Removes the selected frequency band (Delete with a band selected). */
+        void deleteSelectedFrequencies();
+
+        /** Measures the background noise of the selection for Noise Reduction. */
+        void captureNoisePrint();
+        bool hasNoisePrint() const;
 
         void undo();
         void redo();
@@ -217,6 +252,7 @@ namespace mxj
 
         void openFileNow (const juce::File& file);
         void closeFileNow();
+        void newFileNow (double sampleRate, int numChannels);
         void setDocument (std::unique_ptr<AudioDocument>);
 
         /** Records an edit in the undo history and applies it. */
@@ -241,7 +277,12 @@ namespace mxj
             range by its result as one undo step called `name`. */
         void processRange (const juce::String& name, FrameRange range,
                            std::function<AudioSequence (const AudioSequence& input, BlockStore&, BackgroundJob&)> make,
-                           std::function<void()> afterApplied = nullptr);
+                           std::function<void()> afterApplied = nullptr, bool mayUseBand = true);
+
+        /** Runs a spectral edit of the selection in the background as one undo step. */
+        void applySpectral (const juce::String& name,
+                            std::function<AudioSequence (const AudioSequence& audio, const dsp::SpectralRegion&, BlockStore&,
+                                                         const dsp::WorkControl&)> edit);
 
         AppContext& context;
         std::unique_ptr<AudioDocument> document;
@@ -250,6 +291,7 @@ namespace mxj
         juce::String jobError; ///< error of the job that finished last
         juce::int64 cursor = 0;
         FrameRange selection;
+        juce::Range<double> band; ///< selected frequencies (Hz); empty = all
         int selectedMarker = -1;
         AudioSequence clipboard;
         juce::int64 nextRevision = 1;
@@ -260,6 +302,7 @@ namespace mxj
         bool recording = false;
         FrameRange recordRange;
         int newRecordingCount = 0;
+        int newFileCount = 0;
 
         EffectRack rack;
         const dsp::EffectType* previewType = nullptr;

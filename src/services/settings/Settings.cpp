@@ -35,6 +35,12 @@ namespace mxj
             d.set (keys::showSpectrum,       false);
             d.set (keys::showRack,           false);
             d.set (keys::effectRack,         juce::String());
+            d.set (keys::newFileSampleRate,  48000);
+            d.set (keys::newFileChannels,    2);
+            d.set (keys::showSpectral,       false);
+            d.set (keys::spectralScale,      "log");
+            d.set (keys::spectralResolution, 2048);
+            d.set (keys::spectralColours,    "amber");
             return d;
         }();
 

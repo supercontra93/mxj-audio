@@ -24,7 +24,17 @@ add_library(mxj_dsp STATIC
     process/Analysis.cpp
     process/Analysis.h
     process/Render.cpp
-    process/Render.h)
+    process/Render.h
+    repair/NoiseReduction.cpp
+    repair/NoiseReduction.h
+    repair/Restoration.cpp
+    repair/Restoration.h
+    spectral/Fft.cpp
+    spectral/Fft.h
+    spectral/SpectralEdit.cpp
+    spectral/SpectralEdit.h
+    spectral/Stft.cpp
+    spectral/Stft.h)
 
 target_link_libraries(mxj_dsp PUBLIC mxj_core)
 mxj_configure_target(mxj_dsp)

@@ -9,11 +9,13 @@ namespace mxj
 {
     /** A SampleSource stored as a raw file of interleaved 32-bit float frames.
         Created by BlockStore::Writer. The file is deleted when the last
-        reference to the source goes away. */
+        reference to the source goes away, unless it belongs to a saved project
+        (`deleteWhenUnused` false: the audio files in a project's data folder). */
     class BlockFileSource final : public SampleSource
     {
     public:
-        BlockFileSource (juce::File file, int numChannels, double sampleRate, juce::int64 numFrames);
+        BlockFileSource (juce::File file, int numChannels, double sampleRate, juce::int64 numFrames,
+                         bool deleteWhenUnused = true);
         ~BlockFileSource() override;
 
         int getNumChannels() const override         { return channels; }
@@ -33,6 +35,7 @@ namespace mxj
         int channels;
         double rate;
         juce::int64 frames;
+        bool deleteFile = true;
 
         mutable std::mutex streamLock;
         mutable std::unique_ptr<juce::FileInputStream> stream;

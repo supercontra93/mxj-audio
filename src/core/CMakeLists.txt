@@ -23,6 +23,12 @@ add_library(mxj_core STATIC
     edit/EditOperations.h
     history/History.cpp
     history/History.h
+    session/Session.cpp
+    session/Session.h
+    session/SessionEdits.cpp
+    session/SessionEdits.h
+    session/SessionFile.cpp
+    session/SessionFile.h
     Version.h.in)
 
 target_include_directories(mxj_core PUBLIC

@@ -3,6 +3,7 @@
 
 #include "app/AppContext.h"
 #include "app/Workspace.h"
+#include "app/session/SessionWorkspace.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -15,7 +16,7 @@ namespace mxj
     class MainWindow : public juce::DocumentWindow
     {
     public:
-        MainWindow (AppContext& context, Workspace& workspace, std::function<void()> onQuit);
+        MainWindow (AppContext& context, Workspace& workspace, SessionWorkspace& session, std::function<void()> onQuit);
         ~MainWindow() override;
 
         void closeButtonPressed() override;
@@ -33,6 +34,7 @@ namespace mxj
 
         AppContext& context;
         Workspace& workspace;
+        SessionWorkspace& session;
         std::function<void()> onQuit;
         MainComponent* mainComponent = nullptr;
 

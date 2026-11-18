@@ -50,6 +50,11 @@ namespace mxj
             meter), and resets it. Any thread. */
         float takePeakLevel (int channel) noexcept;
 
+        /** Input frames the audio thread has received since start() (lost ones
+            included). Lets the multitrack session line a take up with what
+            played (see PlaybackEngine::setSyncCounter). */
+        const std::atomic<juce::int64>& getCaptureCounter() const noexcept { return framesCaptured; }
+
         /** Input frames lost because the disk could not keep up. */
         juce::int64 getDroppedFrames() const noexcept    { return dropped.load(); }
 
@@ -97,6 +102,7 @@ namespace mxj
         std::atomic<bool> inCallback { false };
         std::atomic<bool> deviceStopped { false };
         std::atomic<juce::int64> dropped { 0 };
+        std::atomic<juce::int64> framesCaptured { 0 };
         std::atomic<float> peakLevels[2] { 0.0f, 0.0f };
         juce::AbstractFifo fifo { fifoFrames };
         juce::AudioBuffer<float> fifoBuffer { 2, fifoFrames };

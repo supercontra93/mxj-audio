@@ -2,6 +2,7 @@
 #include "engine/playback/PlaybackEngine.h"
 
 #include <cmath>
+#include <cstring>
 #include <thread>
 
 namespace mxj
@@ -24,28 +25,28 @@ namespace mxj
             stopThread (4000);
         }
 
-        void setSequence (AudioSequence s)
+        void setSource (std::shared_ptr<PlaybackSource> s)
         {
             const std::lock_guard<std::mutex> lock (requestLock);
-            sequence = std::move (s);
+            source = std::move (s);
         }
 
         bool hasAudio()
         {
             const std::lock_guard<std::mutex> lock (requestLock);
-            return ! sequence.isEmpty();
+            return source != nullptr && source->getLength() > 0;
         }
 
         double getSequenceRate()
         {
             const std::lock_guard<std::mutex> lock (requestLock);
-            return sequence.getSampleRate();
+            return source != nullptr ? source->getSampleRate() : 0.0;
         }
 
         juce::int64 getSequenceLength()
         {
             const std::lock_guard<std::mutex> lock (requestLock);
-            return sequence.getNumFrames();
+            return source != nullptr ? source->getLength() : 0;
         }
 
         /** Returns the request number to wait for with waitForStart(). */
@@ -107,7 +108,7 @@ namespace mxj
                     request.type = Request::none;
 
                     if (r.type == Request::start)
-                        playing = sequence; // a copy of the block list, not of the audio
+                        playing = source;
                 }
 
                 if (r.type == Request::start)
@@ -120,7 +121,7 @@ namespace mxj
                 else if (r.type == Request::halt)
                 {
                     active = false;
-                    playing = {};
+                    playing = nullptr;
                 }
                 else if (active)
                 {
@@ -142,10 +143,15 @@ namespace mxj
 
         void begin (juce::int64 position, double ratio, juce::int64 end)
         {
-            endPos = end < 0 ? playing.getNumFrames() : juce::jlimit ((juce::int64) 0, playing.getNumFrames(), end);
+            const auto length = playing != nullptr ? playing->getLength() : 0;
+            endPos = end < 0 ? length : juce::jlimit ((juce::int64) 0, length, end);
             owner.fifo.reset(); // safe: the audio thread is halted until we signal `started`
             owner.endOfSequenceWritten = false;
-            readPos = juce::jlimit ((juce::int64) 0, playing.getNumFrames(), position);
+            readPos = juce::jlimit ((juce::int64) 0, length, position);
+            buffered = 0;
+
+            if (playing != nullptr)
+                playing->seek (readPos);
             speed = ratio;
             resample = ! juce::approximatelyEqual (speed, 1.0);
             ended = false;
@@ -161,7 +167,8 @@ namespace mxj
 
         void fill()
         {
-            while (active && ! ended && owner.fifo.getFreeSpace() >= chunkFrames && ! threadShouldExit())
+            while (active && ! ended && owner.fifo.getFreeSpace() >= chunkFrames
+                   && owner.fifo.getNumReady() < owner.lookahead.load() && ! threadShouldExit())
             {
                 const auto remaining = endPos - readPos;
 
@@ -176,24 +183,34 @@ namespace mxj
                 if (! resample)
                 {
                     produced = (int) juce::jmin ((juce::int64) chunkFrames, remaining);
-                    playing.read (output.getArrayOfWritePointers(), 2, readPos, produced);
+                    playing->read (output.getArrayOfWritePointers(), produced);
                     readPos += produced;
                 }
                 else
                 {
                     produced = (int) juce::jmin ((juce::int64) chunkFrames, (juce::int64) std::ceil ((double) remaining / speed));
                     const auto inputFrames = (int) std::ceil (produced * speed) + 8;
-                    playing.read (input.getArrayOfWritePointers(), 2, readPos, inputFrames);
+
+                    // Sources are read in order (a mix has effect tails), so input
+                    // the interpolator did not use yet is kept for the next chunk.
+                    if (inputFrames > buffered)
+                    {
+                        float* dest[2] = { input.getWritePointer (0) + buffered, input.getWritePointer (1) + buffered };
+                        playing->read (dest, inputFrames - buffered);
+                        buffered = inputFrames;
+                    }
 
                     int used = 0;
                     for (int c = 0; c < 2; ++c)
                         used = interpolators[c].process (speed, input.getReadPointer (c), output.getWritePointer (c),
                                                          produced, inputFrames, 0);
                     readPos += used;
-                }
 
-                if (playing.getNumChannels() == 1)
-                    output.copyFrom (1, 0, output, 0, 0, produced);
+                    const auto left = juce::jmax (0, buffered - used);
+                    for (int c = 0; c < 2; ++c)
+                        std::memmove (input.getWritePointer (c), input.getReadPointer (c) + used, sizeof (float) * (size_t) left);
+                    buffered = left;
+                }
 
                 write (produced);
             }
@@ -224,7 +241,7 @@ namespace mxj
         PlaybackEngine& owner;
 
         std::mutex requestLock;     // message thread <-> disk thread only
-        AudioSequence sequence;     // guarded by requestLock
+        std::shared_ptr<PlaybackSource> source; // guarded by requestLock
         Request request;            // guarded by requestLock
         int requestGeneration = 0;  // guarded by requestLock
 
@@ -233,8 +250,9 @@ namespace mxj
         mutable juce::WaitableEvent started;
 
         // Disk thread only.
-        AudioSequence playing;
+        std::shared_ptr<PlaybackSource> playing;
         juce::int64 readPos = 0, endPos = 0;
+        int buffered = 0; ///< input frames read from the source but not used yet (resampling)
         double speed = 1.0;
         bool resample = false, ended = false, active = false;
         juce::WindowedSincInterpolator interpolators[2];
@@ -314,8 +332,13 @@ namespace mxj
 
     void PlaybackEngine::setSequence (AudioSequence sequence)
     {
+        setSource (sequence.isEmpty() ? nullptr : std::make_shared<SequencePlaybackSource> (std::move (sequence)));
+    }
+
+    void PlaybackEngine::setSource (std::shared_ptr<PlaybackSource> source)
+    {
         stop();
-        diskThread->setSequence (std::move (sequence));
+        diskThread->setSource (std::move (source));
     }
 
     bool PlaybackEngine::play (juce::int64 startFrame, juce::int64 endFrame)
@@ -334,6 +357,7 @@ namespace mxj
         speedRatio = ratio;
         underruns = 0;
         finishedFlag = false;
+        syncAtStart = -1;
 
         const auto gen = diskThread->requestStart (startFrame, ratio, endFrame);
         if (! diskThread->waitForStart (gen, 3000))
@@ -438,6 +462,10 @@ namespace mxj
         {
             if (resetChainRequested.exchange (false) && activeChain != nullptr)
                 activeChain->reset();
+
+            if (framesPlayed.load() == 0 && syncAtStart.load() < 0)
+                if (const auto* counter = syncCounter.load())
+                    syncAtStart = counter->load (std::memory_order_acquire);
 
             int taken = 0;
 

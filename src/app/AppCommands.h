@@ -3,6 +3,7 @@
 
 #include "app/AppContext.h"
 #include "app/Workspace.h"
+#include "app/session/SessionWorkspace.h"
 
 namespace mxj
 {
@@ -24,6 +25,8 @@ namespace mxj
         std::function<void (float scale)> setTextScale;
     };
 
-    /** Registers the commands of the program. */
-    void registerAppCommands (AppContext& context, Workspace& workspace, AppActions actions);
+    /** Registers the commands of the program. Commands shared by the waveform
+        editor and the multitrack view (save, undo, play, zoom, ...) act on the
+        view that is shown. */
+    void registerAppCommands (AppContext& context, Workspace& workspace, SessionWorkspace& session, AppActions actions);
 }

@@ -41,6 +41,9 @@ namespace mxj
             d.set (keys::spectralScale,      "log");
             d.set (keys::spectralResolution, 2048);
             d.set (keys::spectralColours,    "amber");
+            d.set (keys::showMixer,          true);
+            d.set (keys::showTrackEffects,   false);
+            d.set (keys::sessionSnapping,    true);
             return d;
         }();
 

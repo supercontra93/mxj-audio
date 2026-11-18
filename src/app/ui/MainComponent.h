@@ -5,6 +5,8 @@
 #include "app/AppCommands.h"
 #include "app/Workspace.h"
 #include "app/editor/EditorPage.h"
+#include "app/session/SessionPage.h"
+#include "app/session/SessionWorkspace.h"
 #include "app/ui/StartPage.h"
 #include "app/ui/StatusBar.h"
 
@@ -24,7 +26,7 @@ namespace mxj
                           private juce::ChangeListener
     {
     public:
-        MainComponent (AppContext& context, Workspace& workspace);
+        MainComponent (AppContext& context, Workspace& workspace, SessionWorkspace& session);
         ~MainComponent() override;
 
         void paint (juce::Graphics&) override;
@@ -38,7 +40,8 @@ namespace mxj
         /** Called when a file was opened or closed (the window updates its title). */
         std::function<void()> onDocumentChanged;
 
-        // FileDragAndDropTarget: dropping an audio file opens it.
+        // FileDragAndDropTarget: dropping an audio file opens it (in the multitrack
+        // view the time line imports it), dropping a project (.mxj) opens the project.
         bool isInterestedInFileDrag (const juce::StringArray& files) override;
         void fileDragEnter (const juce::StringArray&, int, int) override  { dragOver = true; repaint(); }
         void fileDragExit (const juce::StringArray&) override             { dragOver = false; repaint(); }
@@ -69,12 +72,14 @@ namespace mxj
 
         AppContext& context;
         Workspace& workspace;
+        SessionWorkspace& session;
         juce::ApplicationCommandManager commandManager;
         juce::StringArray commandOrder;
 
         juce::MenuBarComponent menuBar { this };
         std::unique_ptr<StartPage> startPage;
         std::unique_ptr<EditorPage> editorPage;
+        std::unique_ptr<SessionPage> sessionPage;
         const AudioDocument* shownDocument = nullptr;
         bool dragOver = false;
         StatusBar statusBar;

@@ -48,6 +48,10 @@ namespace mxj
         /** Creates an empty file without a name on disk (after asking to save unsaved changes). */
         void newFile (double sampleRate, int numChannels);
 
+        /** Opens audio made elsewhere (a multitrack mixdown) as a new, unsaved
+            file, after asking to save the open one. */
+        void openRendered (const juce::String& name, const AudioSequence& audio);
+
         /** Closes the file, after asking to save unsaved changes. */
         void closeFile();
 
@@ -236,6 +240,12 @@ namespace mxj
 
         /** Called with a status bar message. */
         std::function<void (const juce::String&)> onStatusMessage;
+
+        /** Called after a file was opened or created (the multitrack view gives way to the editor). */
+        std::function<void()> onDocumentSet;
+
+        /** Opens a multitrack project (.mxj) chosen in the Open dialog or dropped on the window. */
+        std::function<void (const juce::File&)> openProject;
 
         /** Formats a frame position as h:mm:ss.mmm. */
         static juce::String formatTime (juce::int64 frame, double sampleRate);

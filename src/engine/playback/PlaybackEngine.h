@@ -2,6 +2,7 @@
 #pragma once
 
 #include "core/audio/AudioSequence.h"
+#include "engine/playback/PlaybackSource.h"
 #include "dsp/analysis/LevelMeter.h"
 #include "dsp/effects/EffectCatalogue.h"
 
@@ -12,7 +13,7 @@
 
 namespace mxj
 {
-    /** Plays one AudioSequence through the audio device.
+    /** Plays one AudioSequence (or another PlaybackSource) through the audio device.
 
         Three threads take part:
         - the message thread calls play(), stop() and setSequence();
@@ -37,6 +38,14 @@ namespace mxj
 
         /** Stops playback and sets what to play. Message thread. */
         void setSequence (AudioSequence sequence);
+
+        /** Stops playback and sets what to play (phase 5: a session mix). Message thread. */
+        void setSource (std::shared_ptr<PlaybackSource> source);
+
+        /** How far (device frames) the disk thread reads ahead. Less means
+            mixer controls are heard sooner but the disk has less time; the
+            default is the whole FIFO. Any thread. */
+        void setLookahead (int frames) noexcept { lookahead = juce::jlimit (4096, fifoFrames, frames); }
 
         /** Starts playing from `startFrame` (in frames of the sequence) up to
             `endFrame` (-1 = the end). Returns false if there is no sequence or no
@@ -79,6 +88,15 @@ namespace mxj
         /** Deletes a chain the audio thread has let go of, and hands over a
             waiting one. Call regularly from a timer. Message thread. */
         void collectRetiredChain();
+
+        /** A counter of another device callback (the recorder's captured frames)
+            that is read in the callback where playback starts, so a take can be
+            lined up with what played. The recorder's callback must come after
+            this one (AudioEngine adds them in that order). Message thread. */
+        void setSyncCounter (const std::atomic<juce::int64>* counter) noexcept { syncCounter = counter; }
+
+        /** The sync counter's value when playback started, or -1. Any thread. */
+        juce::int64 getSyncValueAtStart() const noexcept { return syncAtStart.load(); }
 
         /** Sample rate of the running device, or 0. */
         double getDeviceSampleRate() const noexcept { return deviceRunning.load() ? deviceRate.load() : 0.0; }
@@ -137,9 +155,12 @@ namespace mxj
         std::atomic<juce::int64> startPosition { 0 };
         std::atomic<double> speedRatio { 1.0 };        ///< sequence frames per device frame
         std::atomic<int> underruns { 0 };
+        std::atomic<const std::atomic<juce::int64>*> syncCounter { nullptr };
+        std::atomic<juce::int64> syncAtStart { -1 };
         double tonePhase = 0.0;
 
         juce::AbstractFifo fifo { fifoFrames };
+        std::atomic<int> lookahead { fifoFrames };
         juce::AudioBuffer<float> fifoBuffer { 2, fifoFrames };
         std::atomic<bool> endOfSequenceWritten { false };
 

@@ -7,17 +7,18 @@
 
 namespace mxj
 {
-    MainWindow::MainWindow (AppContext& ctx, Workspace& w, std::function<void()> quitFunction)
+    MainWindow::MainWindow (AppContext& ctx, Workspace& w, SessionWorkspace& s, std::function<void()> quitFunction)
         : DocumentWindow (version::name, palette::background, DocumentWindow::allButtons),
           context (ctx),
           workspace (w),
+          session (s),
           onQuit (std::move (quitFunction))
     {
         setUsingNativeTitleBar (true);
         setResizable (true, false);
         setResizeLimits (800, 500, 10000, 10000);
 
-        auto content = std::make_unique<MainComponent> (context, workspace);
+        auto content = std::make_unique<MainComponent> (context, workspace, session);
         content->onDocumentChanged = [this] { updateTitle(); };
         mainComponent = content.get();
         setContentOwned (content.release(), false);
@@ -39,7 +40,8 @@ namespace mxj
     void MainWindow::updateTitle()
     {
         const auto* doc = workspace.getDocument();
-        const auto title = doc != nullptr ? (doc->isModified() ? "* " : "") + doc->getDisplayName() + " - " + version::name
+        const auto title = session.isActive() ? (session.isModified() ? "* " : "") + session.getDisplayName() + " - " + version::name
+                         : doc != nullptr ? (doc->isModified() ? "* " : "") + doc->getDisplayName() + " - " + version::name
                                           : juce::String (version::name);
         if (title != getName())
             setName (title);

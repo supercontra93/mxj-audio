@@ -3,7 +3,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 project(MXJAudio
-    VERSION 0.4.0
+    VERSION 0.5.0
     DESCRIPTION "Free and open source audio editor"
     HOMEPAGE_URL "https://github.com/supercontra93/mxj-audio"
     LANGUAGES C CXX)

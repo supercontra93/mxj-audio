@@ -4,13 +4,15 @@
 namespace mxj
 {
     //==============================================================================
-    BlockFileSource::BlockFileSource (juce::File f, int numChannels, double sampleRate, juce::int64 numFrames)
-        : file (std::move (f)), channels (numChannels), rate (sampleRate), frames (numFrames) {}
+    BlockFileSource::BlockFileSource (juce::File f, int numChannels, double sampleRate, juce::int64 numFrames,
+                                      bool deleteWhenUnused)
+        : file (std::move (f)), channels (numChannels), rate (sampleRate), frames (numFrames), deleteFile (deleteWhenUnused) {}
 
     BlockFileSource::~BlockFileSource()
     {
         stream = nullptr;
-        file.deleteFile();
+        if (deleteFile)
+            file.deleteFile();
     }
 
     bool BlockFileSource::read (float* const* dest, int numDestChannels, juce::int64 startFrame, int numFrames) const

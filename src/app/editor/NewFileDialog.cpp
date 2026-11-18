@@ -19,11 +19,11 @@ namespace mxj
         return rates;
     }
 
-    void NewFileDialog::show (Settings& settings, juce::Component* parent, Callback onCreate)
+    void NewFileDialog::show (Settings& settings, juce::Component* parent, Callback onCreate, Kind kind)
     {
         juce::DialogWindow::LaunchOptions options;
-        options.content.setOwned (new NewFileDialog (settings, std::move (onCreate)));
-        options.dialogTitle = TRANS ("New Audio File");
+        options.content.setOwned (new NewFileDialog (settings, std::move (onCreate), kind));
+        options.dialogTitle = kind == Kind::session ? TRANS ("New Multitrack Session") : TRANS ("New Audio File");
         options.dialogBackgroundColour = palette::panel;
         options.componentToCentreAround = parent;
         options.useNativeTitleBar = true;
@@ -32,7 +32,7 @@ namespace mxj
         options.launchAsync();
     }
 
-    NewFileDialog::NewFileDialog (Settings& s, Callback onCreate) : settings (s), callback (std::move (onCreate))
+    NewFileDialog::NewFileDialog (Settings& s, Callback onCreate, Kind k) : settings (s), callback (std::move (onCreate)), kind (k)
     {
         const auto& rates = getSampleRates();
         const auto storedRate = (int) settings.get (keys::newFileSampleRate);
@@ -51,7 +51,8 @@ namespace mxj
         channelBox.addItem (TRANS ("Mono"), 1);
         channelBox.addItem (TRANS ("Stereo"), 2);
         channelBox.setSelectedId ((int) settings.get (keys::newFileChannels) == 1 ? 1 : 2, juce::dontSendNotification);
-        addAndMakeVisible (channelBox);
+        addChildComponent (channelBox);
+        channelBox.setVisible (kind == Kind::audioFile);
 
         createButton.setButtonText (TRANS ("Create"));
         createButton.onClick = [this] { create(); };
@@ -71,7 +72,8 @@ namespace mxj
         const auto channels = channelBox.getSelectedId() == 1 ? 1 : 2;
 
         settings.set (keys::newFileSampleRate, rate);
-        settings.set (keys::newFileChannels, channels);
+        if (kind == Kind::audioFile)
+            settings.set (keys::newFileChannels, channels);
 
         auto cb = callback;
         closeDialog(); // deletes this dialog
@@ -113,6 +115,10 @@ namespace mxj
         g.setColour (palette::textDim);
         g.drawText (TRANS ("Sample rate"), area.removeFromTop (rowHeight()).removeFromLeft (labelWidth()), juce::Justification::centredLeft);
         area.removeFromTop (10);
-        g.drawText (TRANS ("Channels"), area.removeFromTop (rowHeight()).removeFromLeft (labelWidth()), juce::Justification::centredLeft);
+        if (kind == Kind::audioFile)
+            g.drawText (TRANS ("Channels"), area.removeFromTop (rowHeight()).removeFromLeft (labelWidth()), juce::Justification::centredLeft);
+        else
+            g.drawFittedText (TRANS ("All tracks of the session play at this rate. Files with another rate are converted when imported."),
+                              area.removeFromTop (rowHeight() * 2), juce::Justification::centredLeft, 2);
     }
 }

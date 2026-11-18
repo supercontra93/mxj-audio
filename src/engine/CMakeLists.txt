@@ -2,6 +2,9 @@
 add_library(mxj_engine STATIC
     devices/AudioEngine.cpp
     devices/AudioEngine.h
+    mix/SessionMixer.cpp
+    mix/SessionMixer.h
+    playback/PlaybackSource.h
     playback/PlaybackEngine.cpp
     playback/PlaybackEngine.h
     recording/Recorder.cpp

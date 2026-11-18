@@ -66,6 +66,17 @@ namespace mxj
         resized();
     }
 
+    void MainComponent::commandsChanged()
+    {
+        // Existing ids keep their number; removed ones stay as gaps.
+        for (const auto* c : context.commands.getAll())
+            commandOrder.addIfNotAlreadyThere (c->id);
+
+        commandManager.clearCommands();
+        commandManager.registerAllCommandsForTarget (this);
+        menuItemsChanged();
+    }
+
     void MainComponent::paint (juce::Graphics& g)
     {
         g.fillAll (palette::background);
@@ -243,7 +254,8 @@ namespace mxj
     void MainComponent::getAllCommands (juce::Array<juce::CommandID>& ids)
     {
         for (int i = 0; i < commandOrder.size(); ++i)
-            ids.add (i + 1);
+            if (context.commands.contains (commandOrder[i]))
+                ids.add (i + 1);
     }
 
     void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo& result)

@@ -3,7 +3,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 project(MXJAudio
-    VERSION 0.5.0
+    VERSION 0.6.0
     DESCRIPTION "Free and open source audio editor"
     HOMEPAGE_URL "https://github.com/supercontra93/mxj-audio"
     LANGUAGES C CXX)
@@ -23,6 +23,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(MxjDependencies)
 include(MxjJuce)
 include(MxjCompilerSettings)
+include(MxjCatalog)
 
 # Layers, bottom to top. A layer may only use the layers listed before it.
 # tools/check_layers.py enforces this in CI.

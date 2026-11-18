@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "app/ui/Dialogs.h"
+#include "app/theme/Fonts.h"
+#include "app/theme/Palette.h"
 
 namespace mxj::dialogs
 {
@@ -30,6 +32,66 @@ namespace mxj::dialogs
         juce::AlertWindow::showAsync (juce::MessageBoxOptions::makeOptionsOk (juce::MessageBoxIconType::InfoIcon,
                                                                               title, message, TRANS ("OK")),
                                       nullptr);
+    }
+
+    namespace
+    {
+        class TextReport : public juce::Component
+        {
+        public:
+            explicit TextReport (const juce::String& text)
+            {
+                editor.setMultiLine (true);
+                editor.setReadOnly (true);
+                editor.setScrollbarsShown (true);
+                editor.setFont (fonts::mono (13.0f));
+                editor.setText (text, false);
+                addAndMakeVisible (editor);
+
+                copy.setButtonText (TRANS ("Copy"));
+                copy.onClick = [this] { juce::SystemClipboard::copyTextToClipboard (editor.getText()); };
+                addAndMakeVisible (copy);
+
+                close.setButtonText (TRANS ("Close"));
+                close.onClick = [this]
+                {
+                    if (auto* w = findParentComponentOfClass<juce::DialogWindow>())
+                        w->exitModalState (0);
+                };
+                addAndMakeVisible (close);
+                setSize (fonts::scaled (560), fonts::scaled (420));
+            }
+
+            void paint (juce::Graphics& g) override { g.fillAll (palette::panel); }
+
+            void resized() override
+            {
+                auto area = getLocalBounds().reduced (12);
+                auto buttons = area.removeFromBottom (fonts::scaled (28));
+                area.removeFromBottom (10);
+                editor.setBounds (area);
+                close.setBounds (buttons.removeFromRight (fonts::scaled (100)));
+                buttons.removeFromRight (8);
+                copy.setBounds (buttons.removeFromRight (fonts::scaled (100)));
+            }
+
+        private:
+            juce::TextEditor editor;
+            juce::TextButton copy, close;
+        };
+    }
+
+    void showText (const juce::String& title, const juce::String& text, juce::Component* parent)
+    {
+        juce::DialogWindow::LaunchOptions options;
+        options.content.setOwned (new TextReport (text));
+        options.dialogTitle = title;
+        options.dialogBackgroundColour = palette::panel;
+        options.componentToCentreAround = parent;
+        options.useNativeTitleBar = true;
+        options.resizable = true;
+        options.escapeKeyTriggersCloseButton = true;
+        options.launchAsync();
     }
 
     void showWarning (const juce::String& title, const juce::String& message)

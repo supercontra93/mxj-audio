@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "app/effects/EffectRack.h"
 
+#include <optional>
+
 namespace mxj
 {
     int EffectRack::add (const juce::String& typeId)
@@ -8,18 +10,35 @@ namespace mxj
         return add (dsp::EffectSettings::defaultsFor (typeId));
     }
 
+    namespace
+    {
+        /** A slot for these settings. Hosted plugins get a name for their live
+            plugin, so the mixer plays the same plugin the window shows. */
+        std::optional<EffectRack::Slot> makeSlot (dsp::EffectSettings settings)
+        {
+            const auto* type = dsp::catalogue::find (settings.typeId);
+            if (type == nullptr || ! type->isRealtime())
+                return std::nullopt;
+
+            if (type->isHostedPlugin() && settings.instance.isEmpty())
+                settings.instance = juce::Uuid().toString();
+
+            EffectRack::Slot slot;
+            slot.type = type;
+            slot.values = settings.createValues (true);
+            slot.enabled = std::make_shared<std::atomic<bool>> (settings.enabled);
+            slot.instance = type->isHostedPlugin() ? settings.instance : juce::String();
+            return slot;
+        }
+    }
+
     int EffectRack::add (const dsp::EffectSettings& settings)
     {
-        const auto* type = dsp::catalogue::find (settings.typeId);
-        if (type == nullptr || ! type->isRealtime())
+        auto slot = makeSlot (settings);
+        if (! slot.has_value())
             return -1;
 
-        Slot slot;
-        slot.type = type;
-        slot.values = type->createValues();
-        slot.values->setAll (settings.values);
-        slot.enabled = std::make_shared<std::atomic<bool>> (settings.enabled);
-        slots.push_back (std::move (slot));
+        slots.push_back (std::move (*slot));
 
         selected = (int) slots.size() - 1;
         chainChanged();
@@ -71,7 +90,8 @@ namespace mxj
     {
         dsp::ChainSettings chain;
         for (const auto& s : slots)
-            chain.push_back ({ s.type->id, s.values->getAll(), s.enabled->load() });
+            chain.push_back ({ s.type->id, s.values->getAll(), s.enabled->load(),
+                               s.values->state != nullptr ? s.values->state->save() : juce::String(), s.instance });
 
         return chain;
     }
@@ -80,18 +100,8 @@ namespace mxj
     {
         slots.clear();
         for (const auto& s : chain)
-        {
-            const auto* type = dsp::catalogue::find (s.typeId);
-            if (type == nullptr || ! type->isRealtime())
-                continue;
-
-            Slot slot;
-            slot.type = type;
-            slot.values = type->createValues();
-            slot.values->setAll (s.values);
-            slot.enabled = std::make_shared<std::atomic<bool>> (s.enabled);
-            slots.push_back (std::move (slot));
-        }
+            if (auto slot = makeSlot (s))
+                slots.push_back (std::move (*slot));
 
         selected = slots.empty() ? -1 : 0;
         chainChanged();

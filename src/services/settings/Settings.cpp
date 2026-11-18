@@ -44,6 +44,8 @@ namespace mxj
             d.set (keys::showMixer,          true);
             d.set (keys::showTrackEffects,   false);
             d.set (keys::sessionSnapping,    true);
+            d.set (keys::pluginsDisabled,    juce::String());
+            d.set (keys::pluginsDevFolders,  juce::String());
             return d;
         }();
 

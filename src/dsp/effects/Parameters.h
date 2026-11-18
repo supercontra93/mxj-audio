@@ -48,6 +48,26 @@ namespace mxj::dsp
 
     using ParameterList = std::vector<ParameterInfo>;
 
+    /** The part of an effect's settings that is not a list of numbers: the
+        state of a hosted VST3 or CLAP plugin (master plan, section 7). The
+        plugins layer implements it; the dsp layer only passes it along.
+
+        Shared by the processors made from the same ParameterValues, so the
+        plugin window and the sound always belong to the same plugin.
+        Message thread (save and restore may also run on a worker).
+    */
+    class EffectState
+    {
+    public:
+        virtual ~EffectState() = default;
+
+        /** The current state as text (base64), for presets, racks and projects. */
+        virtual juce::String save() = 0;
+
+        /** Loads a state from save(). Does nothing if it is the state it already has. */
+        virtual void restore (const juce::String& saved) = 0;
+    };
+
     /** The current values of one effect's parameters, shared between the
         interface (writes) and the processor (reads, also on the audio thread).
         Lock free: each value is an atomic float, so a slider moves the sound
@@ -73,6 +93,9 @@ namespace mxj::dsp
 
         /** Last gain reduction of a dynamics effect, in dB (0 = none). Written by the processor. */
         std::atomic<float> gainReductionDb { 0.0f };
+
+        /** Hosted plugins only (else nullptr). Set when the values are made. */
+        std::shared_ptr<EffectState> state;
 
     private:
         int count;

@@ -1,0 +1,18 @@
+{
+  "id": "mxj.examples.tremolo",
+  "name": "Tremolo",
+  "version": "1.0.0",
+  "author": "MXJ AUDIO",
+  "license": "MIT",
+  "type": "effect",
+  "category": "Modulation",
+  "description": "Moves the volume up and down, like a guitar amplifier's tremolo.",
+  "minMxjVersion": "0.6.0",
+  "apiVersion": 1,
+  "permissions": [],
+  "parameters": [
+    { "id": "rate",  "name": "Rate",  "type": "number", "min": 0.5, "max": 20, "default": 5, "unit": "Hz", "decimals": 1 },
+    { "id": "depth", "name": "Depth", "type": "number", "min": 0, "max": 100, "default": 50, "unit": "%", "decimals": 0 },
+    { "id": "shape", "name": "Shape", "type": "choice", "choices": ["Smooth", "Hard"], "default": 0 }
+  ]
+}

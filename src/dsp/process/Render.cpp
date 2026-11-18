@@ -98,6 +98,12 @@ namespace mxj::dsp
             chain.process (buffer.getArrayOfWritePointers(), channels, n);
             readPos += n;
 
+            if (chain.getError().isNotEmpty()) // an MXJ plugin failed: keep the audio as it was
+            {
+                out.finish();
+                return {};
+            }
+
             const auto skip = (int) juce::jmin ((juce::int64) n, toSkip);
             toSkip -= skip;
             const auto count = (int) juce::jmin ((juce::int64) (n - skip), length - written);
@@ -127,15 +133,13 @@ namespace mxj::dsp
     }
 
     AudioSequence generate (const EffectSettings& settings, int channels, double rate, juce::int64 numFrames,
-                            BlockStore& store, const WorkControl& control)
+                            BlockStore& store, const WorkControl& control, juce::String* error)
     {
         const auto* type = catalogue::find (settings.typeId);
         if (type == nullptr || type->create == nullptr || channels <= 0 || rate <= 0.0)
             return {};
 
-        auto values = type->createValues();
-        values->setAll (settings.values);
-        auto processor = type->create (values);
+        auto processor = type->create (settings.createValues (false));
         processor->prepare (rate, chunk, channels);
 
         SequenceWriter out (store, channels, rate, numFrames);
@@ -153,6 +157,15 @@ namespace mxj::dsp
             const auto n = (int) juce::jmin ((juce::int64) chunk, numFrames - done);
             buffer.clear();
             processor->process (buffer.getArrayOfWritePointers(), channels, n);
+
+            if (const auto e = processor->getError(); e.isNotEmpty())
+            {
+                if (error != nullptr)
+                    *error = e;
+
+                out.finish();
+                return {};
+            }
 
             if (! out.append (buffer.getArrayOfReadPointers(), n))
             {

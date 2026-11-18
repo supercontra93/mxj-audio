@@ -12,6 +12,10 @@
 #include "app/Workspace.h"
 #include "app/effects/EffectDialog.h"
 #include "app/effects/StatsDialog.h"
+#include "app/plugins/PluginCommands.h"
+#include "app/plugins/PluginSystem.h"
+#include "app/plugins/PluginWindow.h"
+#include "app/plugins/PluginsPage.h"
 #include "app/session/SessionWorkspace.h"
 #include "app/settings/AudioSettingsPanel.h"
 #include "app/theme/Fonts.h"
@@ -116,6 +120,9 @@ namespace mxj
             Log::info ("Audio device: " + context->audio.describeDevice()
                        + (deviceError.isNotEmpty() ? " (" + deviceError + ")" : juce::String()));
 
+            // Before the workspace: its effect rack may hold plugin effects.
+            pluginSystem = std::make_unique<PluginSystem> (*context);
+
             const auto recoverable = context->findRecoverableRun();
             workspace = std::make_unique<Workspace> (*context);
             session = std::make_unique<SessionWorkspace> (*context, *workspace);
@@ -134,6 +141,21 @@ namespace mxj
                 [this] (const juce::String& effectId) { showEffect (effectId); },
                 [this] { showLoudnessAndLevels(); },
                 [this] (float scale) { setTextScale (scale); } });
+
+            registerPlugins();
+            pluginSystem->onPluginsChanged = [this]
+            {
+                registerPlugins();
+                if (mainWindow != nullptr && mainWindow->getMainComponent() != nullptr)
+                    mainWindow->getMainComponent()->commandsChanged();
+            };
+            pluginSystem->onScanFinished = [this] (int found, int blocked)
+            {
+                if (mainWindow != nullptr && mainWindow->getMainComponent() != nullptr)
+                    mainWindow->getMainComponent()->setStatusMessage (TRANS ("Plugin scan finished") + ": " + juce::String (found) + " "
+                                                                      + TRANS ("plugins found") + ", " + juce::String (blocked) + " "
+                                                                      + TRANS ("blocked"));
+            };
 
             mainWindow = std::make_unique<MainWindow> (*context, *workspace, *session, [this] { systemRequestedQuit(); });
 
@@ -160,12 +182,18 @@ namespace mxj
             if (workspace != nullptr)
                 workspace->storeSettings();
 
+            if (pluginSystem != nullptr)
+                pluginSystem->storeSettings();
+
             if (context != nullptr && ! context->settings.save())
                 Log::error ("Could not save settings to " + context->settings.getFile().getFullPathName());
 
+            PluginsPage::closeAll();
+            PluginWindow::closeAll();
             mainWindow = nullptr;
             session = nullptr;
             workspace = nullptr;
+            pluginSystem = nullptr; // after everything that may hold plugin effects
 
             if (context != nullptr)
                 context->audio.shutdown();
@@ -199,6 +227,42 @@ namespace mxj
         void anotherInstanceStarted (const juce::String&) override {}
 
     private:
+        void registerPlugins()
+        {
+            registerPluginCommands (*context, *workspace, *session, *pluginSystem, {
+                [this] (const juce::String& effectId) { showEffect (effectId); },
+                [this] { showPluginsPage(); },
+                [this] { return static_cast<juce::Component*> (mainWindow.get()); } });
+        }
+
+        void showPluginsPage()
+        {
+            PluginsPage::show (*pluginSystem, [this] (const juce::String& id) { usePlugin (id); });
+        }
+
+        /** Opens an MXJ plugin from the plugin page. */
+        void usePlugin (const juce::String& id)
+        {
+            const auto* p = pluginSystem->getLua().find (id);
+            if (p == nullptr)
+                return;
+
+            const auto type = p->info.type;
+            if (type == plugins::LuaPluginInfo::Type::effect || type == plugins::LuaPluginInfo::Type::generator)
+            {
+                if (session->isActive() || ! workspace->canEdit())
+                {
+                    dialogs::showInfo (p->info.name, TRANS ("Open an audio file in the waveform editor first: this plugin changes the selection or the whole file."));
+                    return;
+                }
+
+                showEffect ("lua:" + id);
+                return;
+            }
+
+            runLuaPlugin (*context, *workspace, *pluginSystem, id, mainWindow.get());
+        }
+
         void showAudioSettings()
         {
             AudioSettingsPanel::show (context->audio, context->settings, mainWindow.get(), [this]
@@ -557,10 +621,41 @@ namespace mxj
                             }
 
                             Log::info ("Smoke test: repair OK");
-                            smokeTestExport (length);
+                            smokeTestPlugins (length);
                         });
                     });
                 });
+            });
+        }
+
+        /** Phase 6: an example MXJ plugin is installed from the local catalogue
+            (checked with SHA-256), shows up in the Effects menu, and is applied
+            to two seconds and undone. */
+        void smokeTestPlugins (juce::int64 length)
+        {
+            const juce::String id ("mxj.examples.tremolo");
+            juce::String error;
+            if (! pluginSystem->installFromCatalogue (id, error))
+                return smokeTestFail ("installing a plugin from the catalogue: " + error);
+
+            if (dsp::catalogue::find ("lua:" + id) == nullptr || ! context->commands.contains ("effects.lua:" + id))
+                return smokeTestFail ("the installed plugin is not in the Effects menu");
+
+            const auto second = (juce::int64) workspace->getDocument()->getSampleRate();
+            workspace->setSelection ({ 0, juce::jmin (length, 2 * second) });
+            workspace->applyEffect (dsp::EffectSettings::defaultsFor ("lua:" + id));
+
+            smokeTestWhenIdle ([this, length]
+            {
+                auto* d = workspace->getDocument();
+                const bool applied = d->getAudio().getNumFrames() == length && d->isModified();
+                context->commands.perform ("edit.undo");
+
+                if (! applied || d->isModified())
+                    return smokeTestFail ("applying the MXJ plugin " + juce::String (applied ? "(undo)" : ""));
+
+                Log::info ("Smoke test: plugins OK");
+                smokeTestExport (length);
             });
         }
 
@@ -625,6 +720,7 @@ namespace mxj
         }
 
         std::unique_ptr<AppContext> context;
+        std::unique_ptr<PluginSystem> pluginSystem;
         std::unique_ptr<Workspace> workspace;
         std::unique_ptr<SessionWorkspace> session;
         std::unique_ptr<GrafitLookAndFeel> lookAndFeel;

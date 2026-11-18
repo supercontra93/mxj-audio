@@ -23,7 +23,7 @@ namespace mxj
                  "view.zoomSelection", "view.multitrack", "view.spectral", "view.spectral.mel", "view.spectral.res8192", "view.textSize.small",
                  "transport.toEnd",
                  "multitrack.addBus", "multitrack.moveDown", "multitrack.snap", "multitrack.renameClip",
-                 "window.trackEffects",
+                 "window.trackEffects", "plugins.installFile",
                  "effects.tone", "effects.applyRack", "effects.clipRepair" };
     }
 
@@ -225,8 +225,12 @@ namespace mxj
                  sessionEditable, [&s] { s.mixdownToNewFile(); } });
 
         // Effects (phase 3): one command per effect, grouped into submenus.
-        for (const auto& type : dsp::catalogue::all())
+        for (const auto* entry : dsp::catalogue::all())
         {
+            const auto& type = *entry;
+            if (! type.source.isEmpty())
+                continue; // plugin effects are added by registerPluginCommands()
+
             const auto id = "effects." + type.id;
             c.add ({ id, type.name + "...", "Effects", type.description, {}, editable,
                      [showEffect = actions.showEffect, typeId = type.id] { showEffect (typeId); }, nullptr, type.category });

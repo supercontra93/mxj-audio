@@ -54,6 +54,14 @@ add_library(mxj_app STATIC
     effects/RackPanel.h
     effects/StatsDialog.cpp
     effects/StatsDialog.h
+    plugins/PluginCommands.cpp
+    plugins/PluginCommands.h
+    plugins/PluginSystem.cpp
+    plugins/PluginSystem.h
+    plugins/PluginsPage.cpp
+    plugins/PluginsPage.h
+    plugins/PluginWindow.cpp
+    plugins/PluginWindow.h
     meters/MeterPanel.cpp
     meters/MeterPanel.h
     meters/SpectrumView.cpp
@@ -122,7 +130,16 @@ target_link_libraries(MXJAudio PRIVATE mxj_app mxj_resources)
 mxj_configure_target(MXJAudio)
 set_target_properties(MXJAudio PROPERTIES VS_DEBUGGER_COMMAND_ARGUMENTS "")
 
-install(TARGETS MXJAudio RUNTIME DESTINATION .)
+# Phase 6: the plugin scanner program and the local test catalogue go next to
+# the program, in the build folder too, so it runs from there.
+add_dependencies(MXJAudio mxj_plugin_scanner)
+add_custom_command(TARGET MXJAudio POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:mxj_plugin_scanner> $<TARGET_FILE_DIR:MXJAudio>
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${MXJ_CATALOG_DIR} $<TARGET_FILE_DIR:MXJAudio>/catalog
+    VERBATIM)
+
+install(TARGETS MXJAudio mxj_plugin_scanner RUNTIME DESTINATION .)
+install(DIRECTORY ${MXJ_CATALOG_DIR}/ DESTINATION catalog)
 install(FILES
     ${PROJECT_SOURCE_DIR}/LICENSE
     ${PROJECT_SOURCE_DIR}/THIRD_PARTY.md
@@ -130,4 +147,7 @@ install(FILES
 install(FILES
     ${PROJECT_SOURCE_DIR}/resources/fonts/OFL-IBM-Plex.txt
     ${PROJECT_SOURCE_DIR}/resources/icons/LICENSE-Phosphor.txt
+    ${PROJECT_SOURCE_DIR}/resources/licenses/LICENSE-Lua.txt
+    ${PROJECT_SOURCE_DIR}/resources/licenses/LICENSE-CLAP.txt
+    ${PROJECT_SOURCE_DIR}/resources/licenses/LICENSE-VST3-SDK.txt
     DESTINATION licenses)

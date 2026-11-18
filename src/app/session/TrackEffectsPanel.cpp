@@ -246,25 +246,25 @@ namespace mxj
     void TrackEffectsPanel::showAddMenu()
     {
         juce::PopupMenu menu;
-        const auto& all = dsp::catalogue::all();
+        const auto all = dsp::catalogue::all();
 
         for (const auto& category : dsp::catalogue::categories())
         {
             juce::PopupMenu sub;
             for (size_t i = 0; i < all.size(); ++i)
-                if (all[i].category == category && all[i].isRealtime())
-                    sub.addItem ((int) i + 1, TRANS (all[i].name));
+                if (all[i]->category == category && all[i]->isRealtime())
+                    sub.addItem ((int) i + 1, TRANS (all[i]->name));
 
             if (sub.getNumItems() > 0)
                 menu.addSubMenu (TRANS (category), sub);
         }
 
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (addButton),
-                            [safe = juce::Component::SafePointer<TrackEffectsPanel> (this)] (int result)
+                            [safe = juce::Component::SafePointer<TrackEffectsPanel> (this), all] (int result)
         {
-            if (safe != nullptr && result > 0)
+            if (safe != nullptr && result > 0 && result <= (int) all.size())
             {
-                const auto index = safe->rack.add (dsp::catalogue::all()[(size_t) result - 1].id);
+                const auto index = safe->rack.add (all[(size_t) result - 1]->id);
                 safe->rack.setSelectedSlot (index);
             }
         });

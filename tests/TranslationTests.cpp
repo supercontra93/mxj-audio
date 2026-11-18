@@ -36,7 +36,7 @@ TEST_CASE ("Every TRANS string in the code has a Turkish translation", "[i18n]")
     for (const auto& entry : juce::RangedDirectoryIterator (sourceDir, true, "*.cpp;*.h"))
     {
         const auto text = entry.getFile().loadFileAsString();
-        const bool isCommandFile = entry.getFile().getFileName() == "AppCommands.cpp";
+        const bool isCommandFile = entry.getFile().getFileName() == "AppCommands.cpp" || entry.getFile().getFileName() == "PluginCommands.cpp";
 
         int pos = 0;
         while ((pos = text.indexOf (pos, "TRANS (\"")) >= 0)
@@ -101,8 +101,9 @@ TEST_CASE ("Every effect name, control and preset has a Turkish translation", "[
             missing.addIfNotAlreadyThere (s);
     };
 
-    for (const auto& type : mxj::dsp::catalogue::all())
+    for (const auto* entry : mxj::dsp::catalogue::all())
     {
+        const auto& type = *entry;
         check (type.name);
         check (type.name + "...");
         check (type.category);

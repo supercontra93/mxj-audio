@@ -16,9 +16,13 @@ decision record in `docs/adr/` and a new row here.
 | ASIO SDK headers (bundled in JUCE) | as bundled in JUCE 9.0.5 | GPL-3.0-only (chosen option of a dual licence) | Steinberg, via JUCE `JUCE.spdx.json` | ASIO audio driver support on Windows |
 | Third-party code bundled inside the JUCE modules we compile (FLAC, Ogg/Vorbis and Opus decoders used to open files since 0.1, zlib, libpng, jpeglib, HarfBuzz, SheenBidi, ...) | as bundled in JUCE 9.0.5 | BSD-3-Clause, Zlib, MIT, IJG, libpng, Apache-2.0 (see `JUCE.spdx.json`) | https://github.com/juce-framework/JUCE/blob/9.0.5/JUCE.spdx.json | Inside JUCE |
 | IBM Plex Sans, IBM Plex Mono | 2017-2018 release in IBM/plex master | SIL Open Font License 1.1 | https://github.com/IBM/plex | Interface fonts (`resources/fonts/`) |
+| Lua | 5.4.8 | MIT | https://github.com/lua/lua (official mirror of lua.org), tag v5.4.8 | MXJ plugins (Lua scripts), built as C++ in a sandbox; licence text in `licenses/LICENSE-Lua.txt` |
+| CLAP headers | 1.2.7 | MIT | https://github.com/free-audio/clap | Hosting CLAP plugins (header only); `licenses/LICENSE-CLAP.txt` |
+| VST 3 SDK (bundled in JUCE) | as bundled in JUCE 9.0.5 | MIT | https://github.com/steinbergmedia/vst3sdk | Hosting VST3 plugins through JUCE; `licenses/LICENSE-VST3-SDK.txt` |
 | Phosphor Icons (regular) | core main | MIT | https://github.com/phosphor-icons/core | Icons (`resources/icons/`), incl. transport and zoom icons added in 0.1 and editing, recording and saving icons added in 0.2 |
 
-ASIO is a trademark and software of Steinberg Media Technologies GmbH.
+ASIO is a trademark and software of Steinberg Media Technologies GmbH. VST is a trademark of Steinberg Media
+Technologies GmbH. CLAP is an open standard by the free-audio project.
 
 ## Used only to build or test (not shipped)
 

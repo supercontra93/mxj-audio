@@ -6,19 +6,22 @@
 
 ---
 
-**Status: version 0.5 (phase 5, multitrack session).** Opens WAV, AIFF, FLAC, MP3, Ogg Vorbis and Opus,
+**Status: version 0.6 (phase 6, plugins).** Opens WAV, AIFF, FLAC, MP3, Ogg Vorbis and Opus,
 creates new empty files, records from the microphone, edits without touching the original audio (cut, copy,
 paste, trim, fades, markers, unlimited undo), has 24 effects with live preview and an effect rack, measures
 loudness (LUFS), shows a spectrogram where you can select and heal frequencies, and removes background noise,
 hum, clicks and clipping. Multitrack sessions: tracks and buses with clips, fades, a mixer, volume and pan
-automation, track effects, recording onto a track, mixdown and `.mxj` project files. Saves and exports to WAV, AIFF, FLAC, Ogg Vorbis and Opus, and restores your work
+automation, track effects, recording onto a track, mixdown and `.mxj` project files. Plugins: VST3 and CLAP
+effects (scanned safely in a separate process), MXJ plugins written in Lua ([API](docs/plugins/lua-api.md)) and a
+plugin page with a catalogue. Saves and exports to WAV, AIFF, FLAC, Ogg Vorbis and Opus, and restores your work
 after a crash. See the [roadmap](docs/master-plan.md).
 
-**Durum: Sürüm 0.5 (Faz 5, çok kanallı oturum).** WAV, AIFF, FLAC, MP3, Ogg Vorbis ve Opus açar, yeni boş
+**Durum: Sürüm 0.6 (Faz 6, eklentiler).** WAV, AIFF, FLAC, MP3, Ogg Vorbis ve Opus açar, yeni boş
 dosya oluşturur, mikrofondan kayıt yapar, orijinal sese dokunmadan düzenler, canlı dinlemeli 24 efekti ve efekt rafı
 vardır, ses yüksekliğini (LUFS) ölçer, frekansları seçip iyileştirebileceğin bir spektrogram gösterir; dip gürültüsü,
 uğultu, tık ve kırpılmayı temizler. Çok kanallı oturum: klipli kanallar ve buslar, geçişler, mikser, ses düzeyi ve pan
-otomasyonu, kanal efektleri, kanala kayıt, mixdown ve `.mxj` proje dosyaları. WAV, AIFF, FLAC, Ogg Vorbis ve Opus olarak kaydeder ve çökmeden sonra
+otomasyonu, kanal efektleri, kanala kayıt, mixdown ve `.mxj` proje dosyaları. Eklentiler: VST3 ve CLAP efektleri
+(ayrı bir süreçte güvenle taranır), Lua ile yazılan MXJ eklentileri ve katalogu olan bir eklenti sayfası. WAV, AIFF, FLAC, Ogg Vorbis ve Opus olarak kaydeder ve çökmeden sonra
 çalışmanı geri getirir.
 
 ## Goals / Hedefler

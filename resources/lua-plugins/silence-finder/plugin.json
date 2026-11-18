@@ -1,0 +1,17 @@
+{
+  "id": "mxj.examples.silencefinder",
+  "name": "Silence Finder",
+  "version": "1.0.0",
+  "author": "MXJ AUDIO",
+  "license": "MIT",
+  "type": "analysis",
+  "category": "Analysis",
+  "description": "Lists the quiet parts of the selection or the file: where they start and how long they last.",
+  "minMxjVersion": "0.6.0",
+  "apiVersion": 1,
+  "permissions": [],
+  "parameters": [
+    { "id": "threshold", "name": "Threshold",      "type": "number", "min": -90, "max": -10, "default": -50, "unit": "dB", "decimals": 0 },
+    { "id": "minimum",   "name": "Minimum Length", "type": "number", "min": 0.1, "max": 10, "default": 1, "unit": "s", "decimals": 1 }
+  ]
+}

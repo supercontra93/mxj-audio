@@ -96,6 +96,7 @@ namespace mxj
         void applyStrip (Strip&, juce::int64 start, int numFrames, float* const* target);
 
         // Message thread
+        bool sharePlugins = true; ///< use the live plugins of the track effect panels (not for mixdown)
         Session shown;
         bool hasShown = false;
         std::shared_ptr<Graph> latest;

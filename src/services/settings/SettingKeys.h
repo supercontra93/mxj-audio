@@ -33,4 +33,6 @@ namespace mxj::keys
     inline constexpr const char* showMixer           = "ui.showMixer";            // mixer under the multitrack time line (phase 5)
     inline constexpr const char* showTrackEffects    = "ui.showTrackEffects";     // track effects panel right of the time line
     inline constexpr const char* sessionSnapping     = "session.snap";            // snap clips to edges, markers and the cursor
+    inline constexpr const char* pluginsDisabled     = "plugins.disabled";        // ids of switched-off MXJ plugins, one per line (phase 6)
+    inline constexpr const char* pluginsDevFolders   = "plugins.developerFolders"; // developer plugin folders, one per line
 }

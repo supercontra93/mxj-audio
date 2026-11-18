@@ -29,7 +29,7 @@ and read. Versions are the latest tags at that date (`git ls-remote --tags`).
 | PFFFT | BSD | BSD-style (FFTPACK/UCAR licence, 3 conditions) | `marton78/pffft/LICENSE.txt` | yes | free | 4 |
 | RNNoise | BSD | BSD-3-Clause | `xiph/rnnoise/COPYING` | yes | free | 4 |
 | Lua 5.4 | MIT | MIT | licence text in `lua/lua/lua.h` (lua.org page blocked from the audit machine) | yes | free | 6 |
-| sol2 | MIT | MIT | `ThePhD/sol2/LICENSE.txt` | yes | free | 6 |
+| sol2 | MIT | MIT. Not used: the Lua C API is enough (ADR 0010). | `ThePhD/sol2/LICENSE.txt` | yes | free | - |
 | nlohmann/json | MIT | MIT. Not needed in phase 0: JUCE's JSON is used (ADR 0003). | `nlohmann/json/LICENSE.MIT` | yes | free | maybe 5 |
 | Monocypher | BSD | dual: BSD-2-Clause or CC0-1.0 | `LoupVaillant/Monocypher/LICENCE.md` | yes | free | 8 |
 | Catch2 | BSL | BSL-1.0, tests only | `catchorg/Catch2/LICENSE.txt` | yes | free | 0 |
@@ -49,3 +49,10 @@ and read. Versions are the latest tags at that date (`git ls-remote --tags`).
 - **FFmpeg (optional, user-installed):** not shipped by us; if added later it is loaded only from a copy the user installed.
 - **Windows codecs (M4A/AAC/WMA):** part of Windows, no licence fee for us.
 - **Code signing (phase 8):** only free programmes for open source projects; otherwise unsigned (master plan section 8).
+
+## Phase 6 check (2026-11-18)
+
+Re-checked when the code arrived: Lua **5.4.8** (MIT, notice at the end of `lua.h` of tag v5.4.8, copied to
+`resources/licenses/LICENSE-Lua.txt`), CLAP **1.2.7** headers (MIT, `LICENSE` of tag 1.2.7), and the VST 3 SDK
+bundled in JUCE 9.0.5 (MIT, `VST3_SDK/LICENSE.txt` in JUCE). All three are free, AGPLv3 compatible and shipped
+with their licence texts in the `licenses` folder.

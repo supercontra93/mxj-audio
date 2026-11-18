@@ -63,14 +63,16 @@ namespace mxj::dsp
         the result lines up exactly with the input and has the same length.
 
         Blocks: call on a background thread. Returns an empty sequence (0
-        channels) if cancelled or on a write error.
+        channels) if cancelled, on a write error or when a processor reports an
+        error (chain.getError()).
     */
     AudioSequence render (const AudioSequence& input, ProcessorChain& chain, BlockStore& store,
                           const AudioSequence& following = {}, const WorkControl& control = {});
 
-    /** Generates `numFrames` of new audio with a generator effect (tone, noise). */
+    /** Generates `numFrames` of new audio with a generator effect (tone, noise).
+        On a processor error returns an empty sequence and sets `error`. */
     AudioSequence generate (const EffectSettings& generator, int numChannels, double sampleRate, juce::int64 numFrames,
-                            BlockStore& store, const WorkControl& control = {});
+                            BlockStore& store, const WorkControl& control = {}, juce::String* error = nullptr);
 
     /** The input played backwards. */
     AudioSequence reverse (const AudioSequence& input, BlockStore& store, const WorkControl& control = {});

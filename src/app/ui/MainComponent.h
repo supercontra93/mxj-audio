@@ -34,6 +34,9 @@ namespace mxj
 
         void refreshTexts();
 
+        /** Commands were added or removed (plugins changed): updates menus and shortcuts. */
+        void commandsChanged();
+
         /** Shows a message in the status bar. */
         void setStatusMessage (const juce::String& message);
 

@@ -32,6 +32,7 @@ namespace mxj
         void apply();
         void closeDialog();
         void updateButtons();
+        dsp::EffectSettings getSettings() const;
         juce::String describeTarget() const;
 
         Workspace& workspace;

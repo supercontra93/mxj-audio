@@ -2,6 +2,9 @@
 #include "dsp/effects/EffectCatalogue.h"
 #include "dsp/effects/BuiltInEffects.h"
 
+#include <deque>
+#include <mutex>
+
 namespace mxj::dsp
 {
     //==============================================================================
@@ -26,37 +29,87 @@ namespace mxj::dsp
 
     ParameterValuesPtr EffectType::createValues() const
     {
-        return std::make_shared<ParameterValues> (parameters);
+        return createValues (getDefaults(), {}, {});
+    }
+
+    ParameterValuesPtr EffectType::createValues (const std::vector<float>& v, const juce::String& instance,
+                                                 const juce::String& savedState) const
+    {
+        auto result = std::make_shared<ParameterValues> (parameters);
+        result->setAll (v);
+        if (createState != nullptr)
+            result->state = createState (instance, savedState);
+
+        return result;
     }
 
     //==============================================================================
     namespace catalogue
     {
-        const std::vector<EffectType>& all()
+        namespace
         {
-            static const std::vector<EffectType> types = []
+            const std::vector<EffectType>& builtIns()
             {
-                using namespace builtin;
-                return std::vector<EffectType> {
-                    amplify(), normalize(), matchLoudness(), compressor(), limiter(), gate(), deEsser(),
-                    parametricEq(), graphicEq(), filter(),
-                    delay(), reverb(),
-                    chorus(), flanger(), phaser(),
-                    stereoTools(),
-                    speed(),
-                    noiseReduction(), adaptiveNoiseReduction(), humRemoval(), clickRemoval(), clipRepair(),
-                    toneGenerator(), noiseGenerator()
-                };
-            }();
+                static const std::vector<EffectType> types = []
+                {
+                    using namespace builtin;
+                    return std::vector<EffectType> {
+                        amplify(), normalize(), matchLoudness(), compressor(), limiter(), gate(), deEsser(),
+                        parametricEq(), graphicEq(), filter(),
+                        delay(), reverb(),
+                        chorus(), flanger(), phaser(),
+                        stereoTools(),
+                        speed(),
+                        noiseReduction(), adaptiveNoiseReduction(), humRemoval(), clickRemoval(), clipRepair(),
+                        toneGenerator(), noiseGenerator()
+                    };
+                }();
+                return types;
+            }
 
-            return types;
+            /** Plugin types. A deque never moves its elements, and nothing is ever
+                erased, so pointers handed out stay valid. */
+            struct Added
+            {
+                std::mutex lock;
+                std::deque<EffectType> types;
+                std::vector<bool> visible;
+                int changes = 0;
+            };
+
+            Added& added()
+            {
+                static Added a;
+                return a;
+            }
+        }
+
+        std::vector<const EffectType*> all()
+        {
+            std::vector<const EffectType*> result;
+            for (const auto& t : builtIns())
+                result.push_back (&t);
+
+            auto& a = added();
+            const std::lock_guard<std::mutex> l (a.lock);
+            for (size_t i = 0; i < a.types.size(); ++i)
+                if (a.visible[i])
+                    result.push_back (&a.types[i]);
+
+            return result;
         }
 
         const EffectType* find (const juce::String& id)
         {
-            for (const auto& t : all())
+            for (const auto& t : builtIns())
                 if (t.id == id)
                     return &t;
+
+            auto& a = added();
+            const std::lock_guard<std::mutex> l (a.lock);
+            for (size_t i = 0; i < a.types.size(); ++i)
+                if (a.visible[i] && a.types[i].id == id)
+                    return &a.types[i];
 
             return nullptr;
         }
@@ -64,10 +117,59 @@ namespace mxj::dsp
         juce::StringArray categories()
         {
             juce::StringArray result;
-            for (const auto& t : all())
-                result.addIfNotAlreadyThere (t.category);
+            for (const auto* t : all())
+                result.addIfNotAlreadyThere (t->category);
 
             return result;
+        }
+
+        const EffectType* add (EffectType type)
+        {
+            for (const auto& t : builtIns())
+                if (t.id == type.id)
+                    return nullptr;
+
+            auto& a = added();
+            const std::lock_guard<std::mutex> l (a.lock);
+            for (size_t i = 0; i < a.types.size(); ++i)
+                if (a.types[i].id == type.id)
+                    a.visible[i] = false;
+
+            a.types.push_back (std::move (type));
+            a.visible.push_back (true);
+            ++a.changes;
+            return &a.types.back();
+        }
+
+        void remove (const juce::String& id)
+        {
+            auto& a = added();
+            const std::lock_guard<std::mutex> l (a.lock);
+            for (size_t i = 0; i < a.types.size(); ++i)
+                if (a.visible[i] && a.types[i].id == id)
+                {
+                    a.visible[i] = false;
+                    ++a.changes;
+                }
+        }
+
+        void removeAllWithPrefix (const juce::String& prefix)
+        {
+            auto& a = added();
+            const std::lock_guard<std::mutex> l (a.lock);
+            for (size_t i = 0; i < a.types.size(); ++i)
+                if (a.visible[i] && a.types[i].id.startsWith (prefix))
+                {
+                    a.visible[i] = false;
+                    ++a.changes;
+                }
+        }
+
+        int getChangeCount()
+        {
+            auto& a = added();
+            const std::lock_guard<std::mutex> l (a.lock);
+            return a.changes;
         }
     }
 
@@ -96,6 +198,12 @@ namespace mxj::dsp
                 values_->setProperty (type->parameters[i].id, values[i]);
 
         object->setProperty ("values", juce::var (values_));
+
+        if (state.isNotEmpty())
+            object->setProperty ("state", state);
+        if (instance.isNotEmpty())
+            object->setProperty ("instance", instance);
+
         return juce::var (object);
     }
 
@@ -116,7 +224,18 @@ namespace mxj::dsp
                     s.values[(size_t) index] = type->parameters[(size_t) index].limit ((float) (double) value);
             }
 
+        s.state = v.getProperty ("state", {}).toString();
+        s.instance = v.getProperty ("instance", {}).toString();
         return s;
+    }
+
+    ParameterValuesPtr EffectSettings::createValues (bool shareLivePlugin) const
+    {
+        const auto* type = catalogue::find (typeId);
+        if (type == nullptr)
+            return nullptr;
+
+        return type->createValues (values, shareLivePlugin ? instance : juce::String(), state);
     }
 
     juce::var chainToVar (const ChainSettings& chain)
@@ -159,9 +278,7 @@ namespace mxj::dsp
             if (type == nullptr || ! s.enabled || type->create == nullptr || type->kind == EffectType::Kind::offline)
                 continue;
 
-            auto values = type->createValues();
-            values->setAll (s.values);
-            chain->add (type->create (values));
+            chain->add (type->create (s.createValues (false)));
         }
 
         return chain;
@@ -199,6 +316,15 @@ namespace mxj::dsp
                 if (e.enabled == nullptr || e.enabled->load (std::memory_order_relaxed))
                     e.processor->process (offset, chans, n);
         }
+    }
+
+    juce::String ProcessorChain::getError() const
+    {
+        for (const auto& e : entries)
+            if (const auto error = e.processor->getError(); error.isNotEmpty())
+                return error;
+
+        return {};
     }
 
     int ProcessorChain::getLatencyFrames() const

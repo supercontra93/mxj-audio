@@ -30,4 +30,7 @@ namespace mxj::keys
     inline constexpr const char* spectralScale       = "spectral.scale";          // "linear", "log" or "mel"
     inline constexpr const char* spectralResolution  = "spectral.fftSize";        // 512, 1024, 2048, 4096 or 8192
     inline constexpr const char* spectralColours     = "spectral.colours";        // "amber", "gray" or "rainbow"
+    inline constexpr const char* showMixer           = "ui.showMixer";            // mixer under the multitrack time line (phase 5)
+    inline constexpr const char* showTrackEffects    = "ui.showTrackEffects";     // track effects panel right of the time line
+    inline constexpr const char* sessionSnapping     = "session.snap";            // snap clips to edges, markers and the cursor
 }

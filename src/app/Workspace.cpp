@@ -124,30 +124,38 @@ namespace mxj
 
     void Workspace::showOpenDialog()
     {
-        askToSaveChanges ([this]
+        // The file is chosen first: a project (.mxj) does not close the open audio file.
+        auto folder = juce::File (context.settings.getString (keys::lastOpenFolder));
+        if (! folder.isDirectory())
+            folder = juce::File::getSpecialLocation (juce::File::userMusicDirectory);
+
+        const auto wildcard = openProject != nullptr ? audioFormats::getWildcard() + ";*.mxj" : audioFormats::getWildcard();
+        chooser = std::make_unique<juce::FileChooser> (TRANS ("Open audio file or project"), folder, wildcard, true);
+
+        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                              [this] (const juce::FileChooser& fc)
         {
-            auto folder = juce::File (context.settings.getString (keys::lastOpenFolder));
-            if (! folder.isDirectory())
-                folder = juce::File::getSpecialLocation (juce::File::userMusicDirectory);
+            const auto file = fc.getResult();
+            if (file == juce::File())
+                return;
 
-            chooser = std::make_unique<juce::FileChooser> (TRANS ("Open audio file"), folder,
-                                                           audioFormats::getWildcard(), true);
+            context.settings.set (keys::lastOpenFolder, file.getParentDirectory().getFullPathName());
 
-            chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-                                  [this] (const juce::FileChooser& fc)
-            {
-                const auto file = fc.getResult();
-                if (file != juce::File())
-                {
-                    context.settings.set (keys::lastOpenFolder, file.getParentDirectory().getFullPathName());
-                    openFileNow (file);
-                }
-            });
+            if (file.hasFileExtension ("mxj") && openProject != nullptr)
+                openProject (file);
+            else
+                askToSaveChanges ([this, file] { openFileNow (file); });
         });
     }
 
     bool Workspace::openFile (const juce::File& file)
     {
+        if (file.hasFileExtension ("mxj") && openProject != nullptr)
+        {
+            openProject (file);
+            return true;
+        }
+
         if (document != nullptr && document->isModified())
         {
             askToSaveChanges ([this, file] { openFileNow (file); });
@@ -176,6 +184,9 @@ namespace mxj
 
         if (document != nullptr && document->isReady())
             context.audio.getPlayback().setSequence (document->getAudio());
+
+        if (document != nullptr && onDocumentSet != nullptr)
+            onDocumentSet();
     }
 
     void Workspace::openFileNow (const juce::File& file)
@@ -267,6 +278,21 @@ namespace mxj
         setStatus (TRANS ("New file") + ": " + name + " (" + juce::String (juce::roundToInt (sampleRate)) + " Hz, "
                    + (numChannels == 1 ? TRANS ("Mono") : TRANS ("Stereo")) + ")");
         sendChangeMessage();
+    }
+
+    void Workspace::openRendered (const juce::String& name, const AudioSequence& audio)
+    {
+        askToSaveChanges ([this, name, audio]
+        {
+            AudioFileInfo info;
+            info.numChannels = audio.getNumChannels();
+            info.sampleRate = audio.getSampleRate();
+            info.numFrames = audio.getNumFrames();
+            setDocument (AudioDocument::createRestored (name, info, { audio, {} }));
+            zoomToFit();
+            setStatus (TRANS ("New file") + ": " + name);
+            sendChangeMessage();
+        });
     }
 
     void Workspace::closeFile()

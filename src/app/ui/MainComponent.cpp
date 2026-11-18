@@ -11,7 +11,7 @@ namespace mxj
         int statusBarHeight() { return fonts::scaled (24); }
     }
 
-    MainComponent::MainComponent (AppContext& ctx, Workspace& w) : context (ctx), workspace (w)
+    MainComponent::MainComponent (AppContext& ctx, Workspace& w, SessionWorkspace& s) : context (ctx), workspace (w), session (s)
     {
         for (const auto* c : context.commands.getAll())
             commandOrder.add (c->id);
@@ -29,8 +29,10 @@ namespace mxj
         };
 
         workspace.addChangeListener (this);
+        session.addChangeListener (this);
         context.audio.getDeviceManager().addChangeListener (this);
         workspace.onStatusMessage = [this] (const juce::String& m) { setStatusMessage (m); };
+        session.onStatusMessage = [this] (const juce::String& m) { setStatusMessage (m); };
 
         refreshTexts();
         setSize (1280, 800);
@@ -39,7 +41,9 @@ namespace mxj
     MainComponent::~MainComponent()
     {
         workspace.onStatusMessage = nullptr;
+        session.onStatusMessage = nullptr;
         workspace.removeChangeListener (this);
+        session.removeChangeListener (this);
         context.audio.getDeviceManager().removeChangeListener (this);
         context.commands.onCommandPerformed = nullptr;
         commandManager.setFirstCommandTarget (nullptr);
@@ -49,6 +53,7 @@ namespace mxj
     {
         startPage = nullptr;
         editorPage = nullptr;
+        sessionPage = nullptr;
         shownDocument = nullptr;
         showPage();
 
@@ -77,18 +82,40 @@ namespace mxj
 
         if (editorPage != nullptr)
             editorPage->setBounds (area);
+
+        if (sessionPage != nullptr)
+            sessionPage->setBounds (area);
     }
 
     void MainComponent::showPage()
     {
+        auto run = [this] (const CommandId& id) { runCommand (id); };
+
+        if (session.isActive())
+        {
+            if (sessionPage != nullptr)
+                return;
+
+            startPage = nullptr;
+            editorPage = nullptr;
+            shownDocument = nullptr;
+            sessionPage = std::make_unique<SessionPage> (session, context.commands, run, context);
+            addAndMakeVisible (*sessionPage);
+            resized();
+
+            if (onDocumentChanged != nullptr)
+                onDocumentChanged();
+            return;
+        }
+
         const auto* doc = workspace.getDocument();
         const bool pageExists = doc != nullptr ? editorPage != nullptr : startPage != nullptr;
 
-        if (pageExists && doc == shownDocument)
+        if (pageExists && doc == shownDocument && sessionPage == nullptr)
             return;
 
+        sessionPage = nullptr;
         shownDocument = doc;
-        auto run = [this] (const CommandId& id) { runCommand (id); };
 
         if (doc != nullptr)
         {
@@ -129,7 +156,11 @@ namespace mxj
 
     bool MainComponent::isInterestedInFileDrag (const juce::StringArray& files)
     {
-        return files.size() == 1 && audioFormats::canOpen (juce::File (files[0]));
+        if (files.size() == 1 && juce::File (files[0]).hasFileExtension ("mxj"))
+            return true;
+
+        // The time line of the session takes audio files itself.
+        return ! session.isActive() && files.size() == 1 && audioFormats::canOpen (juce::File (files[0]));
     }
 
     void MainComponent::filesDropped (const juce::StringArray& files, int, int)

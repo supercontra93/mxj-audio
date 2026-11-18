@@ -20,8 +20,11 @@ namespace mxj
 
         if (! callbackAdded)
         {
+            // Order matters: the recorder comes after the session playback (see setSyncCounter).
             deviceManager.addAudioCallback (&playback);
+            deviceManager.addAudioCallback (&sessionPlayback);
             deviceManager.addAudioCallback (&recorder);
+            sessionPlayback.setSyncCounter (&recorder.getCaptureCounter());
             callbackAdded = true;
         }
 
@@ -42,11 +45,13 @@ namespace mxj
     void AudioEngine::shutdown()
     {
         playback.stop();
+        sessionPlayback.stop();
         recorder.stop();
 
         if (callbackAdded)
         {
             deviceManager.removeAudioCallback (&playback);
+            deviceManager.removeAudioCallback (&sessionPlayback);
             deviceManager.removeAudioCallback (&recorder);
             callbackAdded = false;
         }
@@ -152,6 +157,7 @@ namespace mxj
             return {};
 
         playback.stop();
+        sessionPlayback.stop();
 
         juce::String error;
         setInputsEnabled (&input, error);

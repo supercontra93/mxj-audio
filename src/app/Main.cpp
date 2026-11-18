@@ -12,6 +12,7 @@
 #include "app/Workspace.h"
 #include "app/effects/EffectDialog.h"
 #include "app/effects/StatsDialog.h"
+#include "app/session/SessionWorkspace.h"
 #include "app/settings/AudioSettingsPanel.h"
 #include "app/theme/Fonts.h"
 #include "app/theme/GrafitLookAndFeel.h"
@@ -116,12 +117,15 @@ namespace mxj
 
             const auto recoverable = context->findRecoverableRun();
             workspace = std::make_unique<Workspace> (*context);
+            session = std::make_unique<SessionWorkspace> (*context, *workspace);
+            workspace->openProject = [this] (const juce::File& f) { session->openProject (f); };
+            workspace->onDocumentSet = [this] { session->setActive (false); };
 
             lookAndFeel = std::make_unique<GrafitLookAndFeel>();
             juce::LookAndFeel::setDefaultLookAndFeel (lookAndFeel.get());
             tooltipWindow = std::make_unique<juce::TooltipWindow> (nullptr, 600);
 
-            registerAppCommands (*context, *workspace, {
+            registerAppCommands (*context, *workspace, *session, {
                 [this] { systemRequestedQuit(); },
                 [this] { AboutPanel::show (mainWindow.get()); },
                 [this] (const juce::String& code) { setLanguage (code); },
@@ -130,7 +134,7 @@ namespace mxj
                 [this] { showLoudnessAndLevels(); },
                 [this] (float scale) { setTextScale (scale); } });
 
-            mainWindow = std::make_unique<MainWindow> (*context, *workspace, [this] { systemRequestedQuit(); });
+            mainWindow = std::make_unique<MainWindow> (*context, *workspace, *session, [this] { systemRequestedQuit(); });
 
             Log::info ("Main window open");
 
@@ -159,6 +163,7 @@ namespace mxj
                 Log::error ("Could not save settings to " + context->settings.getFile().getFullPathName());
 
             mainWindow = nullptr;
+            session = nullptr;
             workspace = nullptr;
 
             if (context != nullptr)
@@ -181,8 +186,13 @@ namespace mxj
                 return;
             }
 
-            // Unsaved changes: ask first (stops a recording, keeping the take).
-            workspace->askToSaveChanges ([] { juce::JUCEApplication::quit(); });
+            // Unsaved changes: ask first (stops a recording, keeping the take),
+            // for the multitrack session and then for the audio file.
+            session->askToSaveChanges ([this]
+            {
+                if (workspace != nullptr)
+                    workspace->askToSaveChanges ([] { juce::JUCEApplication::quit(); });
+            });
         }
 
         void anotherInstanceStarted (const juce::String&) override {}
@@ -294,8 +304,126 @@ namespace mxj
             }
 
             Log::info ("Smoke test: new file OK");
-            Log::info ("Smoke test passed");
+            smokeTestMultitrack();
+        }
+
+        void smokeTestFail (const juce::String& what)
+        {
+            Log::error ("Smoke test failed: " + what);
+            setApplicationReturnValue (1);
             quit();
+        }
+
+        /** Calls `next` once the session has no background job. */
+        void smokeTestWhenSessionIdle (std::function<void()> next)
+        {
+            if (session->isBusy() && juce::Time::getMillisecondCounter() - smokeTestStart < 80000)
+            {
+                juce::Timer::callAfterDelay (100, [this, next] { smokeTestWhenSessionIdle (next); });
+                return;
+            }
+
+            next();
+        }
+
+        /** Phase 5: a new session, two files imported (one at another sample
+            rate), a bus, the mixdown exported and checked, the project saved,
+            closed and opened again. */
+        void smokeTestMultitrack()
+        {
+            session->newSession (48000.0);
+            if (! session->isActive() || session->getSession().getNumAudioTracks() != 4)
+                return smokeTestFail ("New Multitrack Session");
+
+            // Three seconds of tone at 44.1 kHz (converted to 48 kHz on import).
+            const auto tone = context->paths.getRoot().getChildFile ("smoke-tone.wav");
+            {
+                juce::AudioBuffer<float> audio (2, 3 * 44100);
+                for (int c = 0; c < 2; ++c)
+                    for (int i = 0; i < audio.getNumSamples(); ++i)
+                        audio.setSample (c, i, 0.25f * (float) std::sin (juce::MathConstants<double>::twoPi * 440.0 * i / 44100.0));
+
+                tone.deleteFile();
+                juce::WavAudioFormat wav;
+                std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (tone);
+                auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}
+                                                               .withSampleRate (44100.0)
+                                                               .withNumChannels (2)
+                                                               .withBitsPerSample (16));
+                if (writer == nullptr || ! writer->writeFromAudioSampleBuffer (audio, 0, audio.getNumSamples()))
+                    return smokeTestFail ("could not write the test tone");
+            }
+
+            const auto first = session->getSession().tracks[0].id;
+            const auto second = session->getSession().tracks[1].id;
+            session->importFiles ({ tone }, first, 0);
+
+            smokeTestWhenSessionIdle ([this, tone, second]
+            {
+                session->importFiles ({ tone }, second, 48000);
+
+                smokeTestWhenSessionIdle ([this, second]
+                {
+                    session->addBus();
+                    const auto busId = session->getSelectedTrack();
+                    session->setTrackOutput (second, busId);
+
+                    const auto& s = session->getSession();
+                    int clips = 0;
+                    for (const auto& t : s.tracks)
+                        clips += (int) t.clips.size();
+
+                    // 3 s at 48 kHz, the second clip starts after 1 s: 4 s in all.
+                    const auto expected = (juce::int64) 4 * 48000;
+                    if (clips != 2 || s.tracks.size() != 5 || std::abs (s.getLength() - expected) > 2)
+                        return smokeTestFail ("import (" + juce::String (clips) + " clips, " + juce::String (s.getLength()) + " frames)");
+
+                    ExportSettings settings;
+                    settings.file = context->paths.getRoot().getChildFile ("smoke-mixdown.wav");
+                    settings.format = ExportFormat::wav;
+                    settings.bitsPerSample = 24;
+                    session->exportMixdown (settings);
+
+                    smokeTestWhenSessionIdle ([this, settings, expected]
+                    {
+                        AudioFileInfo info;
+                        juce::String error;
+                        if (! audioFormats::readInfo (settings.file, info, error) || std::abs (info.numFrames - expected) > 2)
+                            return smokeTestFail ("the mixdown is wrong " + error);
+
+                        const auto project = context->paths.getRoot().getChildFile ("smoke-session.mxj");
+                        session->saveAs (project, [this, project]
+                        {
+                            if (session->isModified())
+                                return smokeTestFail ("the project was not saved");
+
+                            session->closeSession();
+                            if (session->hasSession())
+                                return smokeTestFail ("Close session");
+
+                            session->openProject (project);
+
+                            smokeTestWhenSessionIdle ([this]
+                            {
+                                if (! session->hasSession())
+                                    return smokeTestFail ("the project did not open");
+
+                                const auto& opened = session->getSession();
+                                int openedClips = 0;
+                                for (const auto& t : opened.tracks)
+                                    openedClips += (int) t.clips.size();
+
+                                if (opened.tracks.size() != 5 || openedClips != 2 || opened.tracks[1].outputId != opened.tracks[4].id)
+                                    return smokeTestFail ("the opened project is wrong");
+
+                                Log::info ("Smoke test: multitrack OK");
+                                Log::info ("Smoke test passed");
+                                quit();
+                            });
+                        });
+                    });
+                });
+            });
         }
 
         /** Phase 2 part of the smoke test: cut, undo and export through the
@@ -485,6 +613,7 @@ namespace mxj
 
         std::unique_ptr<AppContext> context;
         std::unique_ptr<Workspace> workspace;
+        std::unique_ptr<SessionWorkspace> session;
         std::unique_ptr<GrafitLookAndFeel> lookAndFeel;
         std::unique_ptr<juce::TooltipWindow> tooltipWindow;
         std::unique_ptr<MainWindow> mainWindow;

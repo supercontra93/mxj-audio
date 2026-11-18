@@ -37,7 +37,7 @@ jobs:
       - name: Unit tests
         run: ctest --test-dir build -C Release --output-on-failure
 
-      - name: Smoke test (program starts, opens its window and quits cleanly)
+      - name: Smoke test (program starts, new file, multitrack session, quits cleanly)
         shell: pwsh
         run: |
           $exe  = "build/src/app/MXJAudio_artefacts/Release/MXJ AUDIO.exe"
@@ -52,6 +52,9 @@ jobs:
           }
           if (-not (Select-String -Path (Join-Path $data "logs/*.log") -Pattern "Smoke test: new file OK" -Quiet)) {
             throw "The log does not say a new file was created"
+          }
+          if (-not (Select-String -Path (Join-Path $data "logs/*.log") -Pattern "Smoke test: multitrack OK" -Quiet)) {
+            throw "The log does not say the multitrack session worked"
           }
 
       - name: Smoke test with a 10 minute WAV (opens, loads, cuts, undoes, applies effects, exports, quits cleanly)
@@ -118,6 +121,7 @@ jobs:
           timeout 60 xvfb-run -a "build/src/app/MXJAudio_artefacts/Release/MXJ AUDIO" --smoke-test --data-dir "$RUNNER_TEMP/mxj-data"
           grep -q "Smoke test passed" "$RUNNER_TEMP"/mxj-data/logs/*.log
           grep -q "Smoke test: new file OK" "$RUNNER_TEMP"/mxj-data/logs/*.log
+          grep -q "Smoke test: multitrack OK" "$RUNNER_TEMP"/mxj-data/logs/*.log
           python3 tools/make_test_wav.py "$RUNNER_TEMP/smoke.wav" 600
           timeout 150 xvfb-run -a "build/src/app/MXJAudio_artefacts/Release/MXJ AUDIO" --smoke-test --data-dir "$RUNNER_TEMP/mxj-data-file" "$RUNNER_TEMP/smoke.wav"
           grep -q "file loaded, 28800000 frames" "$RUNNER_TEMP"/mxj-data-file/logs/*.log

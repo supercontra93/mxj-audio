@@ -65,6 +65,7 @@ namespace mxj
         segmentFrames = (juce::int64) (segmentSeconds * sampleRate);
         framesWritten = 0;
         dropped = 0;
+        framesCaptured = 0;
         writeFailed = false;
         deviceStopped = false;
         drainBuffer.setSize (channels, fifoFrames);
@@ -281,6 +282,7 @@ namespace mxj
             }
 
             fifo.finishedWrite (size1 + size2); // the writer thread polls every 10 ms
+            framesCaptured.fetch_add (numSamples, std::memory_order_release);
         }
 
         inCallback = false;

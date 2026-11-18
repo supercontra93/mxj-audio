@@ -26,6 +26,9 @@ juce_add_binary_data(mxj_resources
         ${PROJECT_SOURCE_DIR}/resources/icons/map-pin.svg
         ${PROJECT_SOURCE_DIR}/resources/icons/floppy-disk.svg
         ${PROJECT_SOURCE_DIR}/resources/icons/export.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/magnet.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/faders.svg
+        ${PROJECT_SOURCE_DIR}/resources/icons/music-notes-plus.svg
         ${PROJECT_SOURCE_DIR}/resources/logo.svg
         ${PROJECT_SOURCE_DIR}/resources/i18n/tr.txt)
 set_target_properties(mxj_resources PROPERTIES FOLDER "MXJ")
@@ -67,6 +70,18 @@ add_library(mxj_app STATIC
     editor/SpectrogramRenderer.h
     editor/WaveformView.cpp
     editor/WaveformView.h
+    session/MixerPanel.cpp
+    session/MixerPanel.h
+    session/ProjectFile.cpp
+    session/ProjectFile.h
+    session/SessionPage.cpp
+    session/SessionPage.h
+    session/SessionWorkspace.cpp
+    session/SessionWorkspace.h
+    session/TimelineView.cpp
+    session/TimelineView.h
+    session/TrackEffectsPanel.cpp
+    session/TrackEffectsPanel.h
     settings/AudioSettingsPanel.cpp
     settings/AudioSettingsPanel.h
     theme/Palette.h
@@ -84,6 +99,7 @@ add_library(mxj_app STATIC
     ui/StartPage.h
     ui/StatusBar.cpp
     ui/StatusBar.h
+    ui/IconButton.h
     ui/AboutPanel.cpp
     ui/AboutPanel.h
     ui/Dialogs.cpp

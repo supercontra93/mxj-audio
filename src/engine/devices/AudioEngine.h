@@ -36,6 +36,9 @@ namespace mxj
 
         juce::AudioDeviceManager& getDeviceManager() noexcept { return deviceManager; }
         PlaybackEngine& getPlayback() noexcept               { return playback; }
+
+        /** Plays the multitrack session (phase 5); separate from the file's playback. */
+        PlaybackEngine& getSessionPlayback() noexcept        { return sessionPlayback; }
         Recorder& getRecorder() noexcept                     { return recorder; }
 
         //==============================================================================
@@ -53,7 +56,7 @@ namespace mxj
         /** Input channel names of the device that recording would use. */
         juce::StringArray getInputChannelNames (const juce::String& deviceName);
 
-        /** Switches the inputs on and starts a take in `store`. Returns an error
+        /** Switches the inputs on and starts a take in `store` (both playbacks stop). Returns an error
             message, or an empty string when recording runs. */
         juce::String startRecording (BlockStore& store, const InputChoice& input);
 
@@ -71,7 +74,7 @@ namespace mxj
         juce::AudioDeviceManager deviceManager;
         void setInputsEnabled (const InputChoice* input, juce::String& error);
 
-        PlaybackEngine playback;
+        PlaybackEngine playback, sessionPlayback;
         Recorder recorder;
         bool callbackAdded = false;
 

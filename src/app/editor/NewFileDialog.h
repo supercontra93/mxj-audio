@@ -17,10 +17,13 @@ namespace mxj
         /** Sample rates offered, in Hz. */
         static const std::vector<int>& getSampleRates();
 
-        /** Opens the dialog. `onCreate` runs when the user presses Create. */
-        static void show (Settings& settings, juce::Component* parent, Callback onCreate);
+        /** An audio file, or a multitrack session (sample rate only; phase 5). */
+        enum class Kind { audioFile, session };
 
-        NewFileDialog (Settings&, Callback onCreate);
+        /** Opens the dialog. `onCreate` runs when the user presses Create. */
+        static void show (Settings& settings, juce::Component* parent, Callback onCreate, Kind kind = Kind::audioFile);
+
+        NewFileDialog (Settings&, Callback onCreate, Kind kind = Kind::audioFile);
 
         void paint (juce::Graphics&) override;
         void resized() override;
@@ -31,6 +34,7 @@ namespace mxj
 
         Settings& settings;
         Callback callback;
+        Kind kind;
         juce::ComboBox rateBox, channelBox;
         juce::TextButton createButton, cancelButton;
 

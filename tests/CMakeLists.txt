@@ -8,6 +8,7 @@ add_executable(mxj_tests
     ImportTests.cpp
     PlaybackTests.cpp
     RepairTests.cpp
+    SessionTests.cpp
     HistoryTests.cpp
     SettingsTests.cpp
     LogTests.cpp

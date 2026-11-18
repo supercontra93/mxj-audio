@@ -7,6 +7,7 @@
 #include "app/effects/RackPanel.h"
 #include "app/meters/MeterPanel.h"
 #include "app/meters/SpectrumView.h"
+#include "app/ui/IconButton.h"
 #include "core/commands/CommandRegistry.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -39,8 +40,6 @@ namespace mxj
         static int transportHeight();
 
     private:
-        class IconButton;
-
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
         void scrollBarMoved (juce::ScrollBar*, double newRangeStart) override;
         void timerCallback() override;
